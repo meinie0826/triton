@@ -1800,7 +1800,7 @@ Value transferWithinBlockPadding(triton::gpu::ConvertLayoutOp op, Value src,
 SmallVector<Value> transferWithinBlockSwizzlingImpl(
     Location loc, RewriterBase &rewriter, const LinearLayout &srcLayout,
     const LinearLayout &dstLayout, const TargetInfoBase &targetInfo,
-    ArrayRef<Value> inVals, Type llvmElemTy, Value smemBase) {
+    ArrayRef<Value> inVals, Type llvmElemTy, Value smemBase, Operation *op = nullptr) {
   auto *ctx = rewriter.getContext();
   auto b = TritonLLVMOpBuilder(loc, rewriter);
   // We handle transformations recursively as they all need a preprocessing
@@ -1814,7 +1814,7 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     }));
     auto outVals = transferWithinBlockSwizzlingImpl(
         loc, rewriter, srcLayout, dstLayout, targetInfo, newInVals,
-        llvmElemTyPtr, smemBase);
+        llvmElemTyPtr, smemBase, op);
     for (auto &v : outVals) {
       v = b.inttoptr(llvmElemTy, v);
     }
@@ -1829,7 +1829,7 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
         inVals, [&](Value v) { return b.zext(i8ElemTy, v).getResult(); }));
     auto outVals = transferWithinBlockSwizzlingImpl(
         loc, rewriter, srcLayout, dstLayout, targetInfo, newInVals, i8ElemTy,
-        smemBase);
+        smemBase, op);
     for (auto &v : outVals) {
       v = b.trunc(llvmElemTy, v);
     }
@@ -1843,7 +1843,7 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     auto newInVals = removeBroadcastSrc.apply(inVals);
     return transferWithinBlockSwizzlingImpl(loc, rewriter, prmtSrc, dstLayout,
                                             targetInfo, newInVals, llvmElemTy,
-                                            smemBase);
+                                            smemBase, op);
   }
 
   // Remove broadcasting in dst
@@ -1852,14 +1852,38 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     auto prmtDst = removeBroadcastDst.apply(dstLayout);
     auto outVals = transferWithinBlockSwizzlingImpl(loc, rewriter, srcLayout,
                                                     prmtDst, targetInfo, inVals,
-                                                    llvmElemTy, smemBase);
+                                                    llvmElemTy, smemBase, op);
     return broadcastAs(outVals, dstLayout);
   }
 
   // At this point we have a type that's at least 8-bit
   // and we don't have broadcasting in the registers
   auto bitwidth = llvmElemTy.getIntOrFloatBitWidth();
-  auto smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  
+  // Check if shared_layout is provided in the module attributes
+  LinearLayout smem;
+  if (op) {
+    auto mod = op->getParentOfType<ModuleOp>();
+    if (mod) {
+      auto sharedLayoutAttr = mod->getAttrOfType<StringAttr>("triton.shared_layout");
+      if (sharedLayoutAttr) {
+        // For now, we'll use the first candidate from optimalSwizzlingCandidates
+        // In the future, we can parse the shared_layout string to construct the actual layout
+        auto candidates = triton::gpu::optimalSwizzlingCandidates(srcLayout, dstLayout, bitwidth);
+        if (!candidates.empty()) {
+          smem = candidates[0]; // Use first candidate for now
+        } else {
+          smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+        }
+      } else {
+        smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+      }
+    } else {
+      smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+    }
+  } else {
+    smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  }
 
   // Extract reps from smem
   auto kReg = str_attr("register");
@@ -1955,7 +1979,7 @@ transferWithinBlockSwizzling(triton::gpu::ConvertLayoutOp op, Value src,
   auto inVals = unpackLLElements(loc, src, rewriter);
   auto outVals = transferWithinBlockSwizzlingImpl(loc, rewriter, srcLayout,
                                                   dstLayout, targetInfo, inVals,
-                                                  llvmElemTy, smemBase);
+                                                  llvmElemTy, smemBase, op.getOperation());
 
   Value result = packLLElements(loc, typeConverter, outVals, rewriter, dstTy);
   rewriter.replaceOp(op, result);

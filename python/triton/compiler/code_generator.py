@@ -322,6 +322,11 @@ class CodeGenerator(ast.NodeVisitor):
         self.module = self.builder.create_module() if module is None else module
         self.function_ret_types = {} if function_types is None else function_types
         self.prototype = prototype
+        
+        # Set shared_layout attribute on module if provided
+        if hasattr(prototype, 'attrs') and prototype.attrs and 'shared_layout' in prototype.attrs:
+            shared_layout = prototype.attrs['shared_layout']
+            self.module.set_attr("triton.shared_layout", self.builder.get_string_attr(str(shared_layout)))
 
         self.gscope = {}
         for k, v in gscope.items():

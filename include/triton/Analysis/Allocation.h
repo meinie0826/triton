@@ -64,7 +64,8 @@ ScratchConfig getScratchConfigForCvt(RankedTensorType srcTy,
                                      RankedTensorType dstTy);
 
 unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
-                                       RankedTensorType dstTy);
+                                       RankedTensorType dstTy,
+                                       Operation *op = nullptr);
 
 unsigned getNumScratchElemsPaddedCvt(RankedTensorType srcTy,
                                      RankedTensorType dstTy);

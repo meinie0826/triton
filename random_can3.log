@@ -1,0 +1,2320 @@
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 128)
+   segment=32 -> (1, 8)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 34)
+   segment=256 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (2, 16)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 68)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 64)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 128)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 32)
+   segment=256 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (32, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 32)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 128)
+   segment=8 -> (0, 8)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 64)
+   segment=256 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 8)
+   bank=4 -> (0, 128)
+   bank=8 -> (4, 0)
+ - segment=1 -> (64, 0)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 16)
+   segment=8 -> (2, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (0, 32)
+   segment=128 -> (32, 0)
+   segment=256 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (1, 8)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 128)
+   bank=8 -> (0, 32)
+ - segment=1 -> (16, 0)
+   segment=2 -> (32, 0)
+   segment=4 -> (2, 16)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 64)
+   segment=64 -> (0, 8)
+   segment=128 -> (0, 68)
+   segment=256 -> (0, 16)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 128)
+   segment=32 -> (1, 8)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 34)
+   segment=256 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (2, 16)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 68)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 64)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 128)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 32)
+   segment=256 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (32, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 32)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 128)
+   segment=8 -> (0, 8)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 64)
+   segment=256 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 8)
+   bank=4 -> (0, 128)
+   bank=8 -> (4, 0)
+ - segment=1 -> (64, 0)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 16)
+   segment=8 -> (2, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (0, 32)
+   segment=128 -> (32, 0)
+   segment=256 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (1, 8)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 128)
+   bank=8 -> (0, 32)
+ - segment=1 -> (16, 0)
+   segment=2 -> (32, 0)
+   segment=4 -> (2, 16)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 64)
+   segment=64 -> (0, 8)
+   segment=128 -> (0, 68)
+   segment=256 -> (0, 16)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 128)
+   segment=32 -> (1, 8)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 34)
+   segment=256 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (2, 16)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 68)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 64)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 128)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 32)
+   segment=256 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (32, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 32)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 128)
+   segment=8 -> (0, 8)
+   segment=16 -> (64, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (2, 16)
+   segment=128 -> (0, 64)
+   segment=256 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 8)
+   bank=4 -> (0, 128)
+   bank=8 -> (4, 0)
+ - segment=1 -> (64, 0)
+   segment=2 -> (0, 34)
+   segment=4 -> (0, 16)
+   segment=8 -> (2, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (0, 68)
+   segment=64 -> (0, 32)
+   segment=128 -> (32, 0)
+   segment=256 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (1, 8)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 128)
+   bank=8 -> (0, 32)
+ - segment=1 -> (16, 0)
+   segment=2 -> (32, 0)
+   segment=4 -> (2, 16)
+   segment=8 -> (64, 0)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 64)
+   segment=64 -> (0, 8)
+   segment=128 -> (0, 68)
+   segment=256 -> (0, 16)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+   bank=8 -> (16, 0)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (4, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (32, 0)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 64)
+   segment=128 -> (1, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (0, 32)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (32, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (2, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 8)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (4, 0)
+   bank=8 -> (2, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 32)
+   segment=4 -> (0, 8)
+   segment=8 -> (0, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (1, 8)
+   segment=64 -> (32, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (2, 16)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 128)
+ - segment=1 -> (0, 34)
+   segment=2 -> (32, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (4, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 16)
+   segment=128 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+   bank=8 -> (16, 0)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (4, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (32, 0)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 64)
+   segment=128 -> (1, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (0, 32)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (32, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (2, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 8)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (4, 0)
+   bank=8 -> (2, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 32)
+   segment=4 -> (0, 8)
+   segment=8 -> (0, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (1, 8)
+   segment=64 -> (32, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (2, 16)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 128)
+ - segment=1 -> (0, 34)
+   segment=2 -> (32, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (4, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 16)
+   segment=128 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 34)
+   segment=128 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+   bank=8 -> (16, 0)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (4, 0)
+   segment=8 -> (0, 128)
+   segment=16 -> (32, 0)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 64)
+   segment=128 -> (1, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (0, 32)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (32, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (2, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (0, 8)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (4, 0)
+   bank=8 -> (2, 16)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 32)
+   segment=4 -> (0, 8)
+   segment=8 -> (0, 16)
+   segment=16 -> (0, 34)
+   segment=32 -> (1, 8)
+   segment=64 -> (32, 0)
+   segment=128 -> (0, 128)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (2, 16)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 128)
+ - segment=1 -> (0, 34)
+   segment=2 -> (32, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (4, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 16)
+   segment=128 -> (0, 64)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 256)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (1, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+ - segment=1 -> (0, 8)
+   segment=2 -> (16, 0)
+   segment=4 -> (0, 16)
+   segment=8 -> (0, 18)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 64)
+   segment=64 -> (1, 8)
+   segment=128 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 16)
+   segment=8 -> (1, 8)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 0)
+   segment=64 -> (16, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (0, 64)
+   bank=4 -> (32, 0)
+ - segment=1 -> (2, 0)
+   segment=2 -> (1, 8)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 16)
+   segment=32 -> (16, 0)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (0, 64)
+ - segment=1 -> (0, 16)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (1, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+ - segment=1 -> (0, 8)
+   segment=2 -> (16, 0)
+   segment=4 -> (0, 16)
+   segment=8 -> (0, 18)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 64)
+   segment=64 -> (1, 8)
+   segment=128 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 16)
+   segment=8 -> (1, 8)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 0)
+   segment=64 -> (16, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (0, 64)
+   bank=4 -> (32, 0)
+ - segment=1 -> (2, 0)
+   segment=2 -> (1, 8)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 16)
+   segment=32 -> (16, 0)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (0, 64)
+ - segment=1 -> (0, 16)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (1, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+ - segment=1 -> (0, 8)
+   segment=2 -> (16, 0)
+   segment=4 -> (0, 16)
+   segment=8 -> (0, 18)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 64)
+   segment=64 -> (1, 8)
+   segment=128 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 16)
+   segment=8 -> (1, 8)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 0)
+   segment=64 -> (16, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (0, 64)
+   bank=4 -> (32, 0)
+ - segment=1 -> (2, 0)
+   segment=2 -> (1, 8)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 16)
+   segment=32 -> (16, 0)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (0, 64)
+ - segment=1 -> (0, 16)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (1, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+ - segment=1 -> (0, 8)
+   segment=2 -> (16, 0)
+   segment=4 -> (0, 16)
+   segment=8 -> (0, 18)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 64)
+   segment=64 -> (1, 8)
+   segment=128 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+ - segment=1 -> (0, 64)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 16)
+   segment=8 -> (1, 8)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 0)
+   segment=64 -> (16, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (0, 64)
+   bank=4 -> (32, 0)
+ - segment=1 -> (2, 0)
+   segment=2 -> (1, 8)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 16)
+   segment=32 -> (16, 0)
+   segment=64 -> (4, 0)
+   segment=128 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (0, 64)
+ - segment=1 -> (0, 16)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 32)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 0)
+   segment=32 -> (0, 8)
+   segment=64 -> (0, 18)
+   segment=128 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (2, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 18)
+   segment=8 -> (1, 0)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 8)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (32, 0)
+ - segment=1 -> (0, 36)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 8)
+   segment=8 -> (16, 0)
+   segment=16 -> (1, 0)
+   segment=32 -> (8, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (32, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (2, 8)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 18)
+   segment=8 -> (0, 16)
+   segment=16 -> (8, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 8)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (2, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 18)
+   segment=8 -> (1, 0)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 8)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (32, 0)
+ - segment=1 -> (0, 36)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 8)
+   segment=8 -> (16, 0)
+   segment=16 -> (1, 0)
+   segment=32 -> (8, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (32, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (2, 8)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 18)
+   segment=8 -> (0, 16)
+   segment=16 -> (8, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 8)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (2, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 18)
+   segment=8 -> (1, 0)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 8)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (32, 0)
+ - segment=1 -> (0, 36)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 8)
+   segment=8 -> (16, 0)
+   segment=16 -> (1, 0)
+   segment=32 -> (8, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (32, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (2, 8)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 18)
+   segment=8 -> (0, 16)
+   segment=16 -> (8, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 8)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (2, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 36)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 18)
+   segment=8 -> (1, 0)
+   segment=16 -> (32, 0)
+   segment=32 -> (2, 8)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 18)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (32, 0)
+ - segment=1 -> (0, 36)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 8)
+   segment=8 -> (16, 0)
+   segment=16 -> (1, 0)
+   segment=32 -> (8, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (32, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (2, 8)
+   segment=2 -> (0, 36)
+   segment=4 -> (0, 18)
+   segment=8 -> (0, 16)
+   segment=16 -> (8, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (0, 36)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 8)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 18)
+   segment=64 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 16)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 64)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 34)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 68)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 16)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (16, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (1, 8)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 64)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 16)
+   segment=8 -> (0, 64)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 34)
+   segment=64 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 16)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 64)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 34)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 68)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 16)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (16, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (1, 8)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 64)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 16)
+   segment=8 -> (0, 64)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 34)
+   segment=64 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+   bank=8 -> (0, 64)
+ - segment=1 -> (4, 0)
+   segment=2 -> (16, 0)
+   segment=4 -> (32, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (2, 16)
+   segment=32 -> (0, 34)
+   segment=64 -> (0, 68)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 68)
+   bank=2 -> (4, 0)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (16, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 64)
+   segment=16 -> (1, 8)
+   segment=32 -> (2, 16)
+   segment=64 -> (0, 32)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 34)
+   bank=2 -> (4, 0)
+   bank=4 -> (0, 32)
+   bank=8 -> (1, 8)
+ - segment=1 -> (0, 68)
+   segment=2 -> (0, 16)
+   segment=4 -> (2, 16)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 64)
+   segment=32 -> (16, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (1, 8)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 64)
+ - segment=1 -> (2, 16)
+   segment=2 -> (0, 68)
+   segment=4 -> (0, 34)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+   segment=32 -> (4, 0)
+   segment=64 -> (0, 8)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 68)
+   bank=4 -> (1, 8)
+   bank=8 -> (0, 16)
+ - segment=1 -> (4, 0)
+   segment=2 -> (0, 32)
+   segment=4 -> (2, 16)
+   segment=8 -> (0, 64)
+   segment=16 -> (0, 8)
+   segment=32 -> (0, 34)
+   segment=64 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 128)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 10)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (8, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (0, 10)
+   segment=4 -> (4, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (16, 0)
+   segment=32 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (4, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (16, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (8, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (2, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 10)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 20)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 10)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 16)
+   segment=2 -> (1, 0)
+   segment=4 -> (4, 0)
+   segment=8 -> (2, 0)
+   segment=16 -> (8, 0)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 10)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (8, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (0, 10)
+   segment=4 -> (4, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (16, 0)
+   segment=32 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (4, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (16, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (8, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (2, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 10)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 20)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 10)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 16)
+   segment=2 -> (1, 0)
+   segment=4 -> (4, 0)
+   segment=8 -> (2, 0)
+   segment=16 -> (8, 0)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 10)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (8, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (0, 10)
+   segment=4 -> (4, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (16, 0)
+   segment=32 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (4, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (16, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (8, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (2, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 10)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 20)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 10)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 16)
+   segment=2 -> (1, 0)
+   segment=4 -> (4, 0)
+   segment=8 -> (2, 0)
+   segment=16 -> (8, 0)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 10)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (1, 0)
+   bank=4 -> (0, 16)
+   bank=8 -> (8, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (0, 10)
+   segment=4 -> (4, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (16, 0)
+   segment=32 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (4, 0)
+   bank=8 -> (1, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (16, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (32, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (8, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (8, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (2, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 10)
+   segment=2 -> (4, 0)
+   segment=4 -> (0, 20)
+   segment=8 -> (1, 0)
+   segment=16 -> (0, 16)
+   segment=32 -> (32, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (64, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 10)
+   bank=4 -> (32, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (0, 16)
+   segment=2 -> (1, 0)
+   segment=4 -> (4, 0)
+   segment=8 -> (2, 0)
+   segment=16 -> (8, 0)
+   segment=32 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 128), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (1, 0)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 20)
+   segment=8 -> (2, 0)
+   segment=16 -> (0, 10)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 20)
+   bank=4 -> (8, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (1, 0)
+   segment=2 -> (0, 8)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (4, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (1, 0)
+   bank=8 -> (0, 10)
+ - segment=1 -> (0, 16)
+   segment=2 -> (8, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 8)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (2, 0)
+   bank=8 -> (4, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (8, 0)
+   segment=4 -> (1, 0)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (1, 0)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 20)
+   segment=8 -> (2, 0)
+   segment=16 -> (0, 10)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 20)
+   bank=4 -> (8, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (1, 0)
+   segment=2 -> (0, 8)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (4, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (1, 0)
+   bank=8 -> (0, 10)
+ - segment=1 -> (0, 16)
+   segment=2 -> (8, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 8)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (2, 0)
+   bank=8 -> (4, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (8, 0)
+   segment=4 -> (1, 0)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (1, 0)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 20)
+   segment=8 -> (2, 0)
+   segment=16 -> (0, 10)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 20)
+   bank=4 -> (8, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (1, 0)
+   segment=2 -> (0, 8)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (4, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (1, 0)
+   bank=8 -> (0, 10)
+ - segment=1 -> (0, 16)
+   segment=2 -> (8, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 8)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (2, 0)
+   bank=8 -> (4, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (8, 0)
+   segment=4 -> (1, 0)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (1, 0)
+   bank=8 -> (2, 0)
+ - segment=1 -> (4, 0)
+   segment=2 -> (8, 0)
+   segment=4 -> (16, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (1, 0)
+   bank=2 -> (4, 0)
+   bank=4 -> (16, 0)
+   bank=8 -> (0, 8)
+ - segment=1 -> (8, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 20)
+   segment=8 -> (2, 0)
+   segment=16 -> (0, 10)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (16, 0)
+   bank=2 -> (0, 20)
+   bank=4 -> (8, 0)
+   bank=8 -> (0, 16)
+ - segment=1 -> (1, 0)
+   segment=2 -> (0, 8)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 10)
+   segment=16 -> (4, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (4, 0)
+   bank=2 -> (16, 0)
+   bank=4 -> (1, 0)
+   bank=8 -> (0, 10)
+ - segment=1 -> (0, 16)
+   segment=2 -> (8, 0)
+   segment=4 -> (2, 0)
+   segment=8 -> (0, 8)
+   segment=16 -> (0, 20)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (32, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 10)
+   bank=4 -> (2, 0)
+   bank=8 -> (4, 0)
+ - segment=1 -> (0, 20)
+   segment=2 -> (8, 0)
+   segment=4 -> (1, 0)
+   segment=8 -> (0, 16)
+   segment=16 -> (16, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 64), dim1 (size 32)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+ - segment=1 -> (1, 8)
+   segment=2 -> (2, 0)
+   segment=4 -> (0, 18)
+   segment=8 -> (4, 0)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (2, 0)
+ - segment=1 -> (0, 16)
+   segment=2 -> (0, 18)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (4, 0)
+   bank=4 -> (1, 8)
+ - segment=1 -> (0, 18)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 8)
+   segment=16 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 36)
+ - segment=1 -> (2, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 18)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+ - segment=1 -> (1, 8)
+   segment=2 -> (2, 0)
+   segment=4 -> (0, 18)
+   segment=8 -> (4, 0)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (2, 0)
+ - segment=1 -> (0, 16)
+   segment=2 -> (0, 18)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (4, 0)
+   bank=4 -> (1, 8)
+ - segment=1 -> (0, 18)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 8)
+   segment=16 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 36)
+ - segment=1 -> (2, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 18)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+ - segment=1 -> (1, 8)
+   segment=2 -> (2, 0)
+   segment=4 -> (0, 18)
+   segment=8 -> (4, 0)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (2, 0)
+ - segment=1 -> (0, 16)
+   segment=2 -> (0, 18)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (4, 0)
+   bank=4 -> (1, 8)
+ - segment=1 -> (0, 18)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 8)
+   segment=16 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 36)
+ - segment=1 -> (2, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 18)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Selected candidate: 3
+[INFO] Candidate [0]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 16)
+   bank=4 -> (0, 32)
+ - segment=1 -> (2, 0)
+   segment=2 -> (4, 0)
+   segment=4 -> (1, 8)
+   segment=8 -> (0, 18)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [1]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 16)
+ - segment=1 -> (1, 8)
+   segment=2 -> (2, 0)
+   segment=4 -> (0, 18)
+   segment=8 -> (4, 0)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims--- Benchmarking GEMM for 1024x18944x3584 (dtype=torch.float16) ---
+Triton | Median TFLOPS: 656.54 | Min TFLOPS: 673.69 | Max TFLOPS: 640.05
+PyTorch| Median TFLOPS: 691.60 | Min TFLOPS: 696.83 | Max TFLOPS: 689.47
+
+--- Correctness Verification ---
+✅ Triton's result is close to PyTorch's result.
+ are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [2]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (2, 0)
+ - segment=1 -> (0, 16)
+   segment=2 -> (0, 18)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 36)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [3]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 32)
+   bank=2 -> (4, 0)
+   bank=4 -> (1, 8)
+ - segment=1 -> (0, 18)
+   segment=2 -> (0, 16)
+   segment=4 -> (0, 36)
+   segment=8 -> (0, 8)
+   segment=16 -> (2, 0)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Candidate [4]: 
+ - vector=1 -> (0, 1)
+   vector=2 -> (8, 0)
+   vector=4 -> (16, 0)
+ - bank=1 -> (0, 8)
+   bank=2 -> (0, 32)
+   bank=4 -> (0, 36)
+ - segment=1 -> (2, 0)
+   segment=2 -> (0, 16)
+   segment=4 -> (4, 0)
+   segment=8 -> (1, 8)
+   segment=16 -> (0, 18)
+ - reps is a size 1 dimension
+where out dims are: [dim0 (size 32), dim1 (size 64)]
+[INFO] Selected candidate: 3

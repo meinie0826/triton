@@ -3,13 +3,13 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "triton/Tools/LinearLayout.h"
 #include <cstdint>
 
-namespace mlir::triton {
-class LinearLayout;
-}
-
 namespace mlir::triton::gpu {
+llvm::SmallVector<LinearLayout> optimalSwizzlingCandidates(const LinearLayout &src, const LinearLayout &dst,
+                                                          int32_t bitwidth);
+
 LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
                               int32_t bitwidth);
 

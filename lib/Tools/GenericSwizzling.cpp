@@ -8,6 +8,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
+#include <numeric>
+#include <random>
 
 #define DEBUG_TYPE "generic-swizzling"
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "]: ")
@@ -275,8 +277,9 @@ std::pair<int, int> logBankConflicts(const LinearLayout &src,
   return {read, write};
 }
 
-LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
-                              int32_t bitwidth) {
+SmallVector<LinearLayout>
+optimalSwizzlingCandidates(const LinearLayout &src, const LinearLayout &dst,
+                           int32_t bitwidth) {
   assert(llvm::equal(src.getInDimNames(), dst.getInDimNames()) &&
          "src and dst must have identical in dims");
   assert(llvm::equal(src.getOutDims(), dst.getOutDims()) &&
@@ -453,7 +456,50 @@ LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
                        srcFlat.getOutDims(), /*requireSurjective=*/true);
   basis1D = buildReps(ctx, srcFlat, dstFlat, basis1D);
 
-  return basis1D.reshapeOuts(src.getOutDims());
+  SmallVector<LinearLayout> candidates;
+  candidates.push_back(basis1D.reshapeOuts(src.getOutDims()));
+  return candidates;
+}
+
+LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
+                              int32_t bitwidth) {
+  auto candidates = optimalSwizzlingCandidates(src, dst, bitwidth);
+  // Add a few random permutations of the bank and segment bases
+  if (!candidates.empty()) {
+    auto *ctx = src.getInDimNames().begin()->getContext();
+    auto kVec = StringAttr::get(ctx, "vector");
+    auto kBank = StringAttr::get(ctx, "bank");
+    auto kSeg = StringAttr::get(ctx, "segment");
+    const auto &baseCand = candidates[0];
+    const auto &baseCandFlat = baseCand.flattenOuts();
+    auto vbasis = flatten(baseCandFlat, kVec);
+    auto bbasis = flatten(baseCandFlat, kBank);
+    auto sbasis = flatten(baseCandFlat, kSeg);
+
+    auto nonVecBasis = llvm::to_vector(llvm::concat<int32_t>(bbasis, sbasis));
+    std::mt19937 g(0); // Seed for reproducibility
+    for (int i = 0; i < 4; ++i) {
+      std::shuffle(nonVecBasis.begin(), nonVecBasis.end(), g);
+      SmallVector<int32_t> newBbasis(nonVecBasis.begin(),
+                                       nonVecBasis.begin() + bbasis.size());
+      SmallVector<int32_t> newSbasis(nonVecBasis.begin() + bbasis.size(),
+                                       nonVecBasis.end());
+      LinearLayout newBasis1D({{kVec, unflatten(vbasis)},
+                               {kBank, unflatten(newBbasis)},
+                               {kSeg, unflatten(newSbasis)}},
+                              baseCandFlat.getOutDims(),
+                              /*requireSurjective=*/true);
+      newBasis1D = buildReps(ctx, src.flattenOuts(), dst.flattenOuts(), newBasis1D);
+      candidates.push_back(newBasis1D.reshapeOuts(src.getOutDims()));
+    }
+  }
+
+  // TODO: select the best candidate based on a cost model
+  for(int i = 0; i < candidates.size(); ++i) {
+    printf("[INFO] Candidate [%d]: %s\n", i, candidates[i].toString().c_str());
+  }
+  printf("[INFO] Selected candidate: %d\n", 0);
+  return candidates[0];
 }
 
 } // namespace mlir::triton::gpu

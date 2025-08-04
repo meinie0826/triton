@@ -445,7 +445,9 @@ def create_function_from_signature(sig, kparams, backend):
 def dynamic_func({", ".join(list(map(arg, sig.parameters.items())) + ["**options"])}):
     params = {{{', '.join([f"'{name}': {name}" for name in sig.parameters.keys()])}}}
     specialization = [{','.join(specialization)}]
-    return params, specialization, options
+    # Extract shared_layout from options if present
+    shared_layout = options.pop('shared_layout', None)
+    return params, specialization, options, shared_layout
 """
     # Prepare defaults to be inserted into function namespace
     func_namespace = {
@@ -561,25 +563,29 @@ class JITFunction(KernelInterface[T]):
         kernel_cache, target, backend, binder = self.device_caches[device]
         # specialization is list[tuple[str, Any]], where first element of tuple is
         # the type and the second parameter is the 'specialization' value.
-        bound_args, specialization, options = binder(*args, **kwargs)
+        bound_args, specialization, options, shared_layout = binder(*args, **kwargs)
 
         # compute cache key
-        key = str(specialization) + str(options)
+        key = str(specialization) + str(options) + str(shared_layout)
         kernel = kernel_cache.get(key, None)
 
         # Kernel is not cached; we have to compile.
         if kernel is None:
+            # Remove shared_layout from kwargs before processing options
+            kwargs_copy = kwargs.copy()
+            kwargs_copy.pop('shared_layout', None)
+            
             # options
-            options = backend.parse_options(kwargs)
+            options = backend.parse_options(kwargs_copy)
             # signature
             sigkeys = [x.name for x in self.params]
             sigvals = [x[0] for x in specialization]
             signature = {k: v for (k, v) in zip(sigkeys, sigvals)}
             # check arguments
-            assert "device_type" not in kwargs, "device_type option is deprecated; current target will be used"
-            assert "device" not in kwargs, "device option is deprecated; current device will be used"
-            assert "stream" not in kwargs, "stream option is deprecated; current stream will be used"
-            for k in kwargs:
+            assert "device_type" not in kwargs_copy, "device_type option is deprecated; current target will be used"
+            assert "device" not in kwargs_copy, "device option is deprecated; current device will be used"
+            assert "stream" not in kwargs_copy, "stream option is deprecated; current stream will be used"
+            for k in kwargs_copy:
                 if k not in options.__dict__ and k not in sigkeys:
                     raise KeyError("Keyword argument %s was specified but unrecognised" % k)
             # constexprs
@@ -589,6 +595,9 @@ class JITFunction(KernelInterface[T]):
             attrvals = [x[1] for x in specialization]
             attrs = find_paths_if(attrvals, lambda _, x: isinstance(x, str))
             attrs = {k: backend.parse_attr(get_iterable_path(attrvals, k)) for k in attrs}
+            # Add shared_layout to attrs if provided
+            if shared_layout is not None:
+                attrs['shared_layout'] = shared_layout
 
             kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
             if kernel is None:

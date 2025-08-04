@@ -40,14 +40,40 @@ static unsigned getBitwidth(RankedTensorType ty) {
 }
 
 unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
-                                       RankedTensorType dstTy) {
+                                       RankedTensorType dstTy,
+                                       Operation *op) {
   auto *ctx = srcTy.getContext();
   auto srcLayout = gpu::toLinearLayout(srcTy);
   auto dstLayout = gpu::toLinearLayout(dstTy);
   srcLayout = actionRemoveBroadcastedRegs(srcLayout).apply(srcLayout);
   dstLayout = actionRemoveBroadcastedRegs(dstLayout).apply(dstLayout);
   auto bitwidth = getBitwidth(srcTy);
-  auto smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  
+  // Check if shared_layout is provided in the module attributes
+  LinearLayout smem;
+  if (op) {
+    auto mod = op->getParentOfType<ModuleOp>();
+    if (mod) {
+      auto sharedLayoutAttr = mod->getAttrOfType<StringAttr>("triton.shared_layout");
+      if (sharedLayoutAttr) {
+        // For now, we'll use the first candidate from optimalSwizzling
+        // In the future, we can parse the shared_layout string to construct the actual layout
+        auto candidates = gpu::optimalSwizzlingCandidates(srcLayout, dstLayout, bitwidth);
+        if (!candidates.empty()) {
+          smem = candidates[0]; // Use first candidate for now
+        } else {
+          smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+        }
+      } else {
+        smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+      }
+    } else {
+      smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+    }
+  } else {
+    smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  }
+  
   auto reps = smem.getInDimSize(StringAttr::get(ctx, "reps"));
   return smem.getTotalOutDimSize() / reps;
 }
@@ -216,7 +242,7 @@ unsigned defaultAllocationAnalysisScratchSizeFn(Operation *op) {
     if (!cvtNeedsSharedMemory(srcTy, dstTy))
       return 0;
     // Pesimistically take the max. We will revisit later
-    auto elems = std::max(getNumScratchElemsSwizzledCvt(srcTy, dstTy),
+    auto elems = std::max(getNumScratchElemsSwizzledCvt(srcTy, dstTy, op),
                           getNumScratchElemsPaddedCvt(srcTy, dstTy));
 
     return elems * getBitwidth(srcTy) / 8;

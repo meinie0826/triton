@@ -129,17 +129,17 @@ def check_env_flag(name: str, default: str = "") -> bool:
 
 
 def get_build_type():
-    if check_env_flag("DEBUG"):
-        return "Debug"
-    elif check_env_flag("REL_WITH_DEB_INFO"):
-        return "RelWithDebInfo"
-    elif check_env_flag("TRITON_REL_BUILD_WITH_ASSERTS"):
-        return "TritonRelBuildWithAsserts"
-    elif check_env_flag("TRITON_BUILD_WITH_O1"):
-        return "TritonBuildWithO1"
-    else:
-        # TODO: change to release when stable enough
-        return "TritonRelBuildWithAsserts"
+    # if check_env_flag("DEBUG"):
+    return "Debug"
+    # elif check_env_flag("REL_WITH_DEB_INFO"):
+    #     return "RelWithDebInfo"
+    # elif check_env_flag("TRITON_REL_BUILD_WITH_ASSERTS"):
+    #     return "TritonRelBuildWithAsserts"
+    # elif check_env_flag("TRITON_BUILD_WITH_O1"):
+    #     return "TritonBuildWithO1"
+    # else:
+    #     # TODO: change to release when stable enough
+    #     return "TritonRelBuildWithAsserts"
 
 
 def get_env_with_keys(key: list):
@@ -526,7 +526,7 @@ class CMakeBuild(build_ext):
         subprocess.check_call(["cmake", self.base_dir] + cmake_args, cwd=cmake_dir, env=env)
         update_symlink(Path(self.base_dir) / "compile_commands.json", cmake_dir / "compile_commands.json")
         subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=cmake_dir)
-        subprocess.check_call(["cmake", "--build", ".", "--target", "mlir-doc"], cwd=cmake_dir)
+        # subprocess.check_call(["cmake", "--build", ".", "--target", "mlir-doc"], cwd=cmake_dir)
 
 
 def download_and_copy_dependencies():
