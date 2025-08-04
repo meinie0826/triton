@@ -496,9 +496,9 @@ LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
 
   // TODO: select the best candidate based on a cost model
   for(int i = 0; i < candidates.size(); ++i) {
-    printf("[INFO] Candidate [%d]: %s\n", i, candidates[i].toString().c_str());
+    // printf("[INFO] Candidate [%d]: %s\n", i, candidates[i].toString().c_str());
   }
-  printf("[INFO] Selected candidate: %d\n", 0);
+//   printf("[INFO] Selected candidate: %d\n", 0);
   return candidates[0];
 }
 

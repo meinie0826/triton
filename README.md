@@ -244,7 +244,7 @@ export TRITON_OVERRIDE_DIR=<override_dir>
 # Step 3: Delete the stages that you do not want to override and modify the stage you do want to override
 # Step 4: Run the kernel again to see the overridden result
 ```
-
+#  python setup.py build_ext --inplace
 
 # Changelog
 

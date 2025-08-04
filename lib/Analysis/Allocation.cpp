@@ -12,15 +12,135 @@
 #include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
 #include "triton/Tools/GenericSwizzling.h"
 #include "triton/Tools/LayoutUtils.h"
+#include "triton/Tools/LinearLayout.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include <charconv>
+#include <regex>
+#include <string>
+#include <system_error>
 
 #define DEBUG_TYPE "allocation-shared-memory"
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "]: ")
 #define LDBG(X) LLVM_DEBUG(DBGS() << X << "\n")
 
 namespace ttng = mlir::triton::nvidia_gpu;
+
+namespace {
+// Parses a string representation of a LinearLayout, guided by the constructor
+// format found in unittests (e.g., SwizzleTest.cpp).
+//
+// The string format is a compact representation of a LinearLayout's bases and
+// output dimensions. For example:
+//   "{vector={1,16}, order={0,1}, cta_shape={128,128}}"
+//
+// This is parsed into arguments for the LinearLayout constructor:
+//   `LinearLayout(BasesT bases, ArrayRef<pair<StringAttr, int>> outDims, ...)`
+//
+// 1. `outDims` is constructed from "order" and "cta_shape".
+//    - `order={0,1}` and `cta_shape={128,128}` becomes
+//      `[("dim0", 128), ("dim1", 128)]`.
+//    - The order of pairs in this array determines the order of elements in the
+//      basis vectors.
+//
+// 2. `bases` is constructed from the other key-value pairs (e.g., "vector").
+//    - `vector={1,16}` with two output dimensions becomes a basis list
+//      containing one vector: `{{1, 16}}`.
+//    - This corresponds to `L(vector=1) = (dim0=1, dim1=16)`.
+//
+std::optional<mlir::triton::LinearLayout>
+parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
+  std::string str = layoutStr.str();
+  // Regex to capture key-value pairs, e.g., "vector={1,16}"
+  std::regex pairRegex(R"(\s*(\w+)\s*=\s*\{([^}]+)\})");
+  auto words_begin =
+      std::sregex_iterator(str.begin(), str.end(), pairRegex);
+  auto words_end = std::sregex_iterator();
+
+  if (std::distance(words_begin, words_end) == 0) {
+    return std::nullopt;
+  }
+
+  // Store all parsed key-value pairs from the string.
+  llvm::StringMap<llvm::SmallVector<int32_t>> parsedIntVectors;
+  for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+    std::smatch match = *i;
+    std::string key = match[1].str();
+    std::string value_str = match[2].str();
+
+    std::regex numRegex(R"(-?\d+)");
+    auto numbers_begin =
+        std::sregex_iterator(value_str.begin(), value_str.end(), numRegex);
+    auto numbers_end = std::sregex_iterator();
+
+    llvm::SmallVector<int32_t> values;
+    for (std::sregex_iterator j = numbers_begin; j != numbers_end; ++j) {
+      std::string num_str = (*j).str();
+      int32_t val;
+      auto [ptr, ec] =
+          std::from_chars(num_str.data(), num_str.data() + num_str.size(), val);
+      if (ec == std::errc()) {
+        values.push_back(val);
+      } else {
+        return std::nullopt; // Parsing error
+      }
+    }
+    parsedIntVectors[key] = values;
+  }
+
+  // 1. Construct `outDims` from "order" and "cta_shape".
+  auto orderIt = parsedIntVectors.find("order");
+  auto ctaShapeIt = parsedIntVectors.find("cta_shape");
+
+  if (orderIt == parsedIntVectors.end() ||
+      ctaShapeIt == parsedIntVectors.end() ||
+      orderIt->getValue().size() != ctaShapeIt->getValue().size()) {
+    // "order" and "cta_shape" are required and must have matching sizes.
+    return std::nullopt;
+  }
+
+  const auto &orderVec = orderIt->getValue();
+  const auto &ctaShapeVec = ctaShapeIt->getValue();
+  size_t numOutDims = orderVec.size();
+
+  llvm::SmallVector<std::pair<mlir::StringAttr, int32_t>> outDims;
+  for (size_t i = 0; i < numOutDims; ++i) {
+    std::string dimName = "dim" + std::to_string(orderVec[i]);
+    outDims.push_back({mlir::StringAttr::get(ctx, dimName), ctaShapeVec[i]});
+  }
+
+  // 2. Construct `bases` from the remaining key-value pairs.
+  mlir::triton::LinearLayout::BasesT bases;
+  for (const auto &entry : parsedIntVectors) {
+    llvm::StringRef key = entry.getKey();
+    if (key == "order" || key == "cta_shape") {
+      continue;
+    }
+
+    const auto &flat_basis = entry.getValue();
+    if (numOutDims > 0 && flat_basis.size() % numOutDims != 0) {
+      return std::nullopt; // Malformed basis vector.
+    }
+
+    std::vector<std::vector<int32_t>> basisVectors;
+    size_t numBases = numOutDims > 0 ? flat_basis.size() / numOutDims : 0;
+    for (size_t i = 0; i < numBases; ++i) {
+      std::vector<int32_t> singleBasis;
+      for (size_t j = 0; j < numOutDims; ++j) {
+        singleBasis.push_back(flat_basis[i * numOutDims + j]);
+      }
+      basisVectors.push_back(singleBasis);
+    }
+    bases.insert({mlir::StringAttr::get(ctx, key), basisVectors});
+  }
+
+  // 3. Call the constructor, mirroring the test case structure.
+  return mlir::triton::LinearLayout(bases, outDims,
+                                    /*requireSurjective=*/false);
+}
+} // anonymous namespace
 
 namespace mlir {
 
@@ -48,31 +168,33 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
   srcLayout = actionRemoveBroadcastedRegs(srcLayout).apply(srcLayout);
   dstLayout = actionRemoveBroadcastedRegs(dstLayout).apply(dstLayout);
   auto bitwidth = getBitwidth(srcTy);
-  
+
   // Check if shared_layout is provided in the module attributes
   LinearLayout smem;
+  bool layoutProvided = false;
   if (op) {
     auto mod = op->getParentOfType<ModuleOp>();
     if (mod) {
-      auto sharedLayoutAttr = mod->getAttrOfType<StringAttr>("triton.shared_layout");
+      auto sharedLayoutAttr =
+          mod->getAttrOfType<StringAttr>("triton.shared_layout");
+        printf("sharedLayoutAttr: %s\n",
+               sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
+                                : "null");
       if (sharedLayoutAttr) {
-        // For now, we'll use the first candidate from optimalSwizzling
-        // In the future, we can parse the shared_layout string to construct the actual layout
-        auto candidates = gpu::optimalSwizzlingCandidates(srcLayout, dstLayout, bitwidth);
-        if (!candidates.empty()) {
-          smem = candidates[0]; // Use first candidate for now
-        } else {
-          smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+        auto parsedLayout =
+            parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
+            printf("parsedLayout: %s\n",
+                   parsedLayout ? parsedLayout->toString().c_str() : "null");
+        if (parsedLayout) {
+          smem = *parsedLayout;
+          layoutProvided = true;
         }
-      } else {
-        smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
       }
-    } else {
-      smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
     }
-  } else {
-    smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
   }
+
+  smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  printf("smem: %s\n", smem.toString().c_str());
   
   auto reps = smem.getInDimSize(StringAttr::get(ctx, "reps"));
   return smem.getTotalOutDimSize() / reps;

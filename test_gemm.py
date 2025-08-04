@@ -105,6 +105,7 @@ def matmul(a, b):
         a.stride(0), a.stride(1),
         b.stride(0), b.stride(1),
         c.stride(0), c.stride(1),
+        shared_layout="candidate_0"
     )
     return c
 
