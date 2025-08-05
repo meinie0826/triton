@@ -103,7 +103,7 @@ parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
                 outDimPart.split(entry,"->",-1,false);
                 int dim;
                 if (entry[1].getAsInteger(10, dim)) {
-                    printf("[Allocation ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
+                    fprintf(stderr, "[Allocation ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
                 }
                 outDims.push_back({mlir::StringAttr::get(ctx, entry[0]), dim});
             }
@@ -111,12 +111,12 @@ parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
         if (key == "reps") {
             int rep;
             if (value_str.getAsInteger(10, rep)) {
-                printf("[Allocation ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
+                fprintf(stderr, "[Allocation ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
             }
             if(rep == 0){
                 bases.insert({mlir::StringAttr::get(ctx, key), {}});
             }else {
-                printf("[Allocation INFO] rep is not\n");
+                fprintf(stderr, "[Allocation INFO] rep is not\n");
             }
         }
     }
@@ -161,13 +161,13 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
     if (mod) {
       auto sharedLayoutAttr =
           mod->getAttrOfType<StringAttr>("triton.shared_layout");
-        printf("[Allocation] sharedLayoutAttr: %s\n",
+        fprintf(stderr, "[Allocation] sharedLayoutAttr: %s\n",
                sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
                                 : "null");
       if (sharedLayoutAttr) {
         parsedLayout =
             parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
-            printf("[Allocation] parsedLayout: %s\n",
+            fprintf(stderr, "[Allocation] parsedLayout: %s\n",
                    parsedLayout ? parsedLayout->toString().c_str() : "null");
         if (parsedLayout) {
           smem = *parsedLayout;
@@ -179,11 +179,11 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
   
   smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
   if(parsedLayout->toString() == smem.toString()) {
-    printf("[Allocation] parsedLayout matches smem: %s\n",
+    fprintf(stderr, "[Allocation] parsedLayout matches smem: %s\n",
            smem.toString().c_str());
     smem = parsedLayout.value();
   }
-  printf("[Allocation] smem: %s\n", smem.toString().c_str());
+  fprintf(stderr, "[Allocation] smem: %s\n", smem.toString().c_str());
   
   auto reps = smem.getInDimSize(StringAttr::get(ctx, "reps"));
   return smem.getTotalOutDimSize() / reps;

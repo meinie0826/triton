@@ -1875,7 +1875,7 @@ parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
                 outDimPart.split(entry,"->",-1,false);
                 int dim;
                 if (entry[1].getAsInteger(10, dim)) {
-                    printf("[Utility ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
+                    fprintf(stderr, "[Utility ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
                 }
                 outDims.push_back({mlir::StringAttr::get(ctx, entry[0]), dim});
             }
@@ -1883,7 +1883,7 @@ parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
         if (key == "reps") {
             int rep;
             if (value_str.getAsInteger(10, rep)) {
-                printf("[Utility ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
+                fprintf(stderr, "[Utility ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
             }
             if(rep == 0){
                 bases.insert({mlir::StringAttr::get(ctx, key), {}});
@@ -1966,13 +1966,13 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     if (mod) {
       auto sharedLayoutAttr =
           mod->getAttrOfType<StringAttr>("triton.shared_layout");
-        printf("Utility sharedLayoutAttr: %s\n",
+        fprintf(stderr, "Utility sharedLayoutAttr: %s\n",
                sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
                                 : "null");
       if (sharedLayoutAttr) {
         parsedLayout =
             parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
-            printf("Utility parsedLayout: %s\n",
+            fprintf(stderr, "Utility parsedLayout: %s\n",
                    parsedLayout ? parsedLayout->toString().c_str() : "null");
         if (parsedLayout) {
           smem = *parsedLayout;
@@ -1984,11 +1984,11 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
   
   smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
   if(parsedLayout->toString() == smem.toString()) {
-    printf("Utility parsedLayout matches smem: %s\n",
+    fprintf(stderr, "Utility parsedLayout matches smem: %s\n",
            smem.toString().c_str());
     smem = parsedLayout.value();
   }
-  printf("Utility smem: %s\n", smem.toString().c_str());
+  fprintf(stderr, "Utility smem: %s\n", smem.toString().c_str());
 
 
   // Extract reps from smem
