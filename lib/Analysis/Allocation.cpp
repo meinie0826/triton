@@ -29,116 +29,99 @@
 namespace ttng = mlir::triton::nvidia_gpu;
 
 namespace {
-// Parses a string representation of a LinearLayout, guided by the constructor
-// format found in unittests (e.g., SwizzleTest.cpp).
-//
-// The string format is a compact representation of a LinearLayout's bases and
-// output dimensions. For example:
-//   "{vector={1,16}, order={0,1}, cta_shape={128,128}}"
-//
-// This is parsed into arguments for the LinearLayout constructor:
-//   `LinearLayout(BasesT bases, ArrayRef<pair<StringAttr, int>> outDims, ...)`
-//
-// 1. `outDims` is constructed from "order" and "cta_shape".
-//    - `order={0,1}` and `cta_shape={128,128}` becomes
-//      `[("dim0", 128), ("dim1", 128)]`.
-//    - The order of pairs in this array determines the order of elements in the
-//      basis vectors.
-//
-// 2. `bases` is constructed from the other key-value pairs (e.g., "vector").
-//    - `vector={1,16}` with two output dimensions becomes a basis list
-//      containing one vector: `{{1, 16}}`.
-//    - This corresponds to `L(vector=1) = (dim0=1, dim1=16)`.
-//
 std::optional<mlir::triton::LinearLayout>
 parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
-  std::string str = layoutStr.str();
-  // Regex to capture key-value pairs, e.g., "vector={1,16}"
-  std::regex pairRegex(R"(\s*(\w+)\s*=\s*\{([^}]+)\})");
-  auto words_begin =
-      std::sregex_iterator(str.begin(), str.end(), pairRegex);
-  auto words_end = std::sregex_iterator();
+    mlir::triton::LinearLayout::BasesT bases;
+    size_t numOutDims = 0;
 
-  if (std::distance(words_begin, words_end) == 0) {
-    return std::nullopt;
-  }
+    llvm::SmallVector<llvm::StringRef> dimParts;
+    layoutStr.split(dimParts, ';', -1, false);
 
-  // Store all parsed key-value pairs from the string.
-  llvm::StringMap<llvm::SmallVector<int32_t>> parsedIntVectors;
-  for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-    std::smatch match = *i;
-    std::string key = match[1].str();
-    std::string value_str = match[2].str();
+    for (llvm::StringRef part : dimParts) {
+        auto keyVal = part.split(':');
+        llvm::StringRef key = keyVal.first.trim();
+        std::string value_str = keyVal.second.trim().str();
 
-    std::regex numRegex(R"(-?\d+)");
-    auto numbers_begin =
-        std::sregex_iterator(value_str.begin(), value_str.end(), numRegex);
-    auto numbers_end = std::sregex_iterator();
+        if (key.empty() || value_str.empty() || key == "reps" || key == "outdims") continue;
+        
+        std::regex entryRegex(R"(\d+->\([^)]*\))");
+        auto entries_begin = std::sregex_iterator(value_str.begin(), value_str.end(), entryRegex);
+        auto entries_end = std::sregex_iterator();
 
-    llvm::SmallVector<int32_t> values;
-    for (std::sregex_iterator j = numbers_begin; j != numbers_end; ++j) {
-      std::string num_str = (*j).str();
-      int32_t val;
-      auto [ptr, ec] =
-          std::from_chars(num_str.data(), num_str.data() + num_str.size(), val);
-      if (ec == std::errc()) {
-        values.push_back(val);
-      } else {
-        return std::nullopt; // Parsing error
-      }
+        std::vector<std::vector<int32_t>> basisVectors;
+        for (std::sregex_iterator i = entries_begin; i != entries_end; ++i) {
+            std::string entry_str = (*i).str();
+            llvm::StringRef entry(entry_str);
+
+            size_t delimiterPos = entry.find("->");
+            if (delimiterPos == llvm::StringRef::npos) continue;
+
+            llvm::StringRef valTuple = entry.substr(delimiterPos + 2).trim();
+
+            if (valTuple.empty() || !valTuple.starts_with('(') || !valTuple.ends_with(')')) continue;
+
+            valTuple = valTuple.drop_front(1).drop_back(1);
+
+            if (valTuple.empty()) {
+                basisVectors.push_back({});
+                continue;
+            }
+
+            llvm::SmallVector<llvm::StringRef> numStrs;
+            valTuple.split(numStrs, ',', -1, false);
+
+            std::vector<int32_t> singleBasis;
+            for (llvm::StringRef numStr : numStrs) {
+                int32_t val;
+                if (numStr.trim().getAsInteger(10, val)) {
+                    return std::nullopt;
+                }
+                singleBasis.push_back(val);
+            }
+            basisVectors.push_back(singleBasis);
+        }
+        bases.insert({mlir::StringAttr::get(ctx, key), basisVectors});
     }
-    parsedIntVectors[key] = values;
-  }
+    
+    if (bases.empty()) return std::nullopt;
+    
+    llvm::SmallVector<std::pair<mlir::StringAttr, int32_t>> outDims;
+    for (llvm::StringRef part : dimParts) {
+        auto keyVal = part.split(':');
+        llvm::StringRef key = keyVal.first.trim();
+        llvm::StringRef value_str = keyVal.second.trim(); 
 
-  // 1. Construct `outDims` from "order" and "cta_shape".
-  auto orderIt = parsedIntVectors.find("order");
-  auto ctaShapeIt = parsedIntVectors.find("cta_shape");
-
-  if (orderIt == parsedIntVectors.end() ||
-      ctaShapeIt == parsedIntVectors.end() ||
-      orderIt->getValue().size() != ctaShapeIt->getValue().size()) {
-    // "order" and "cta_shape" are required and must have matching sizes.
-    return std::nullopt;
-  }
-
-  const auto &orderVec = orderIt->getValue();
-  const auto &ctaShapeVec = ctaShapeIt->getValue();
-  size_t numOutDims = orderVec.size();
-
-  llvm::SmallVector<std::pair<mlir::StringAttr, int32_t>> outDims;
-  for (size_t i = 0; i < numOutDims; ++i) {
-    std::string dimName = "dim" + std::to_string(orderVec[i]);
-    outDims.push_back({mlir::StringAttr::get(ctx, dimName), ctaShapeVec[i]});
-  }
-
-  // 2. Construct `bases` from the remaining key-value pairs.
-  mlir::triton::LinearLayout::BasesT bases;
-  for (const auto &entry : parsedIntVectors) {
-    llvm::StringRef key = entry.getKey();
-    if (key == "order" || key == "cta_shape") {
-      continue;
+        if (key.empty() || value_str.empty()) continue;
+        
+        if (key == "outdims") {
+            llvm::SmallVector<llvm::StringRef> outDimParts;
+            value_str.split(outDimParts, ',', -1, false);
+            for (llvm::StringRef outDimPart : outDimParts) {
+                llvm::StringRef outDimName = outDimPart.trim();
+                if (outDimName.empty()) continue;
+                llvm::SmallVector<llvm::StringRef> entry; 
+                outDimPart.split(entry,"->",-1,false);
+                int dim;
+                if (entry[1].getAsInteger(10, dim)) {
+                    printf("[Allocation ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
+                }
+                outDims.push_back({mlir::StringAttr::get(ctx, entry[0]), dim});
+            }
+        }
+        if (key == "reps") {
+            int rep;
+            if (value_str.getAsInteger(10, rep)) {
+                printf("[Allocation ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
+            }
+            if(rep == 0){
+                bases.insert({mlir::StringAttr::get(ctx, key), {}});
+            }else {
+                printf("[Allocation INFO] rep is not\n");
+            }
+        }
     }
 
-    const auto &flat_basis = entry.getValue();
-    if (numOutDims > 0 && flat_basis.size() % numOutDims != 0) {
-      return std::nullopt; // Malformed basis vector.
-    }
-
-    std::vector<std::vector<int32_t>> basisVectors;
-    size_t numBases = numOutDims > 0 ? flat_basis.size() / numOutDims : 0;
-    for (size_t i = 0; i < numBases; ++i) {
-      std::vector<int32_t> singleBasis;
-      for (size_t j = 0; j < numOutDims; ++j) {
-        singleBasis.push_back(flat_basis[i * numOutDims + j]);
-      }
-      basisVectors.push_back(singleBasis);
-    }
-    bases.insert({mlir::StringAttr::get(ctx, key), basisVectors});
-  }
-
-  // 3. Call the constructor, mirroring the test case structure.
-  return mlir::triton::LinearLayout(bases, outDims,
-                                    /*requireSurjective=*/false);
+    return mlir::triton::LinearLayout(bases, outDims, false);
 }
 } // anonymous namespace
 
@@ -171,19 +154,20 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
 
   // Check if shared_layout is provided in the module attributes
   LinearLayout smem;
+  std::optional<mlir::triton::LinearLayout> parsedLayout = std::nullopt;
   bool layoutProvided = false;
   if (op) {
     auto mod = op->getParentOfType<ModuleOp>();
     if (mod) {
       auto sharedLayoutAttr =
           mod->getAttrOfType<StringAttr>("triton.shared_layout");
-        printf("sharedLayoutAttr: %s\n",
+        printf("[Allocation] sharedLayoutAttr: %s\n",
                sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
                                 : "null");
       if (sharedLayoutAttr) {
-        auto parsedLayout =
+        parsedLayout =
             parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
-            printf("parsedLayout: %s\n",
+            printf("[Allocation] parsedLayout: %s\n",
                    parsedLayout ? parsedLayout->toString().c_str() : "null");
         if (parsedLayout) {
           smem = *parsedLayout;
@@ -192,9 +176,14 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
       }
     }
   }
-
+  
   smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
-  printf("smem: %s\n", smem.toString().c_str());
+  if(parsedLayout->toString() == smem.toString()) {
+    printf("[Allocation] parsedLayout matches smem: %s\n",
+           smem.toString().c_str());
+    smem = parsedLayout.value();
+  }
+  printf("[Allocation] smem: %s\n", smem.toString().c_str());
   
   auto reps = smem.getInDimSize(StringAttr::get(ctx, "reps"));
   return smem.getTotalOutDimSize() / reps;

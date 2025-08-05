@@ -13,7 +13,10 @@
 #include "triton/Tools/LinearLayout.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
-
+#include <charconv>
+#include <regex>
+#include <string>
+#include <system_error>
 #include <functional>
 
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -1797,6 +1800,100 @@ Value transferWithinBlockPadding(triton::gpu::ConvertLayoutOp op, Value src,
       packLLElements(loc, typeConverter, outVals, rewriter, op.getType());
   return result;
 }
+
+std::optional<mlir::triton::LinearLayout>
+parseLinearLayoutFromString(llvm::StringRef layoutStr, mlir::MLIRContext *ctx) {
+    mlir::triton::LinearLayout::BasesT bases;
+    size_t numOutDims = 0;
+
+    llvm::SmallVector<llvm::StringRef> dimParts;
+    layoutStr.split(dimParts, ';', -1, false);
+
+    for (llvm::StringRef part : dimParts) {
+        auto keyVal = part.split(':');
+        llvm::StringRef key = keyVal.first.trim();
+        std::string value_str = keyVal.second.trim().str();
+
+        if (key.empty() || value_str.empty() || key == "reps" || key == "outdims") continue;
+        
+        std::regex entryRegex(R"(\d+->\([^)]*\))");
+        auto entries_begin = std::sregex_iterator(value_str.begin(), value_str.end(), entryRegex);
+        auto entries_end = std::sregex_iterator();
+
+        std::vector<std::vector<int32_t>> basisVectors;
+        for (std::sregex_iterator i = entries_begin; i != entries_end; ++i) {
+            std::string entry_str = (*i).str();
+            llvm::StringRef entry(entry_str);
+
+            size_t delimiterPos = entry.find("->");
+            if (delimiterPos == llvm::StringRef::npos) continue;
+
+            llvm::StringRef valTuple = entry.substr(delimiterPos + 2).trim();
+
+            if (valTuple.empty() || !valTuple.starts_with('(') || !valTuple.ends_with(')')) continue;
+
+            valTuple = valTuple.drop_front(1).drop_back(1);
+
+            if (valTuple.empty()) {
+                basisVectors.push_back({});
+                continue;
+            }
+
+            llvm::SmallVector<llvm::StringRef> numStrs;
+            valTuple.split(numStrs, ',', -1, false);
+
+            std::vector<int32_t> singleBasis;
+            for (llvm::StringRef numStr : numStrs) {
+                int32_t val;
+                if (numStr.trim().getAsInteger(10, val)) {
+                    return std::nullopt;
+                }
+                singleBasis.push_back(val);
+            }
+            basisVectors.push_back(singleBasis);
+        }
+        bases.insert({mlir::StringAttr::get(ctx, key), basisVectors});
+    }
+    
+    if (bases.empty()) return std::nullopt;
+    
+    llvm::SmallVector<std::pair<mlir::StringAttr, int32_t>> outDims;
+    for (llvm::StringRef part : dimParts) {
+        auto keyVal = part.split(':');
+        llvm::StringRef key = keyVal.first.trim();
+        llvm::StringRef value_str = keyVal.second.trim(); 
+
+        if (key.empty() || value_str.empty()) continue;
+        
+        if (key == "outdims") {
+            llvm::SmallVector<llvm::StringRef> outDimParts;
+            value_str.split(outDimParts, ',', -1, false);
+            for (llvm::StringRef outDimPart : outDimParts) {
+                llvm::StringRef outDimName = outDimPart.trim();
+                if (outDimName.empty()) continue;
+                llvm::SmallVector<llvm::StringRef> entry; 
+                outDimPart.split(entry,"->",-1,false);
+                int dim;
+                if (entry[1].getAsInteger(10, dim)) {
+                    printf("[Utility ERROR] Invalid dimension size in outdims: %s\n", entry[1].str().c_str());
+                }
+                outDims.push_back({mlir::StringAttr::get(ctx, entry[0]), dim});
+            }
+        }
+        if (key == "reps") {
+            int rep;
+            if (value_str.getAsInteger(10, rep)) {
+                printf("[Utility ERROR] Invalid dimension size in reps: %s\n", value_str.str().c_str());
+            }
+            if(rep == 0){
+                bases.insert({mlir::StringAttr::get(ctx, key), {}});
+            }
+        }
+    }
+
+    return mlir::triton::LinearLayout(bases, outDims, false);
+}
+
 SmallVector<Value> transferWithinBlockSwizzlingImpl(
     Location loc, RewriterBase &rewriter, const LinearLayout &srcLayout,
     const LinearLayout &dstLayout, const TargetInfoBase &targetInfo,
@@ -1859,31 +1956,40 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
   // At this point we have a type that's at least 8-bit
   // and we don't have broadcasting in the registers
   auto bitwidth = llvmElemTy.getIntOrFloatBitWidth();
-  
+//   auto smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
   // Check if shared_layout is provided in the module attributes
   LinearLayout smem;
+  std::optional<mlir::triton::LinearLayout> parsedLayout = std::nullopt;
+  bool layoutProvided = false;
   if (op) {
     auto mod = op->getParentOfType<ModuleOp>();
     if (mod) {
-      auto sharedLayoutAttr = mod->getAttrOfType<StringAttr>("triton.shared_layout");
+      auto sharedLayoutAttr =
+          mod->getAttrOfType<StringAttr>("triton.shared_layout");
+        printf("Utility sharedLayoutAttr: %s\n",
+               sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
+                                : "null");
       if (sharedLayoutAttr) {
-        // For now, we'll use the first candidate from optimalSwizzlingCandidates
-        // In the future, we can parse the shared_layout string to construct the actual layout
-        auto candidates = triton::gpu::optimalSwizzlingCandidates(srcLayout, dstLayout, bitwidth);
-        if (!candidates.empty()) {
-          smem = candidates[0]; // Use first candidate for now
-        } else {
-          smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+        parsedLayout =
+            parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
+            printf("Utility parsedLayout: %s\n",
+                   parsedLayout ? parsedLayout->toString().c_str() : "null");
+        if (parsedLayout) {
+          smem = *parsedLayout;
+          layoutProvided = true;
         }
-      } else {
-        smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
       }
-    } else {
-      smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
     }
-  } else {
-    smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
   }
+  
+  smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+  if(parsedLayout->toString() == smem.toString()) {
+    printf("Utility parsedLayout matches smem: %s\n",
+           smem.toString().c_str());
+    smem = parsedLayout.value();
+  }
+  printf("Utility smem: %s\n", smem.toString().c_str());
+
 
   // Extract reps from smem
   auto kReg = str_attr("register");
