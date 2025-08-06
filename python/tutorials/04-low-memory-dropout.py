@@ -31,7 +31,13 @@ In doing so, you will learn about:
 # keeps the norm consistent regardless of the dropout probability.
 #
 # Let's first take a look at the baseline implementation.
-
+import sys
+# 将下面的路径替换为你实际的 Triton 源码根目录路径
+TRITON_SOURCE_ROOT = "/home/meiziyuan/triton/python"
+# ---------------
+# 将 Triton 源码根目录插入到 sys.path 的最前面
+# 这样 Python 会优先在这个目录下查找 triton 包
+sys.path.insert(0, TRITON_SOURCE_ROOT)
 import tabulate
 import torch
 

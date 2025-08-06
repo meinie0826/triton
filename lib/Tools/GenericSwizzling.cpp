@@ -463,8 +463,8 @@ optimalSwizzlingCandidates(const LinearLayout &src, const LinearLayout &dst,
 
 LinearLayout optimalSwizzling(const LinearLayout &src, const LinearLayout &dst,
                               int32_t bitwidth) {
-    fprintf(stderr,"[optimalSwizzling] src: %s, dst: %s, bitwidth: %d\n",
-            src.toString().c_str(), dst.toString().c_str(), bitwidth);
+    // fprintf(stderr,"[optimalSwizzling] src: %s, dst: %s, bitwidth: %d\n",
+    //         src.toString().c_str(), dst.toString().c_str(), bitwidth);
   auto candidates = optimalSwizzlingCandidates(src, dst, bitwidth);
   // Add a few random permutations of the bank and segment bases
   if (!candidates.empty()) {

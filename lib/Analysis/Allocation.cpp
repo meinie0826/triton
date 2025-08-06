@@ -161,14 +161,14 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
     if (mod) {
       auto sharedLayoutAttr =
           mod->getAttrOfType<StringAttr>("triton.shared_layout");
-        fprintf(stderr, "[Allocation] sharedLayoutAttr: %s\n",
-               sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
-                                : "null");
+        // fprintf(stderr, "[Allocation] sharedLayoutAttr: %s\n",
+        //        sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
+        //                         : "null");
       if (sharedLayoutAttr) {
         parsedLayout =
             parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
-            fprintf(stderr, "[Allocation] parsedLayout: %s\n",
-                   parsedLayout ? parsedLayout->toString().c_str() : "null");
+            // fprintf(stderr, "[Allocation] parsedLayout: %s\n",
+            //        parsedLayout ? parsedLayout->toString().c_str() : "null");
         if (parsedLayout) {
           smem = *parsedLayout;
           layoutProvided = true;
@@ -176,14 +176,18 @@ unsigned getNumScratchElemsSwizzledCvt(RankedTensorType srcTy,
       }
     }
   }
-  
-  smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
-  if(parsedLayout->toString() == smem.toString()) {
-    fprintf(stderr, "[Allocation] parsedLayout matches smem: %s\n",
-           smem.toString().c_str());
-    smem = parsedLayout.value();
-  }
-  fprintf(stderr, "[Allocation] smem: %s\n", smem.toString().c_str());
+    if(layoutProvided) 
+    {
+        // fprintf(stderr, "[Allocation] use parsedLayout\n");
+        smem = parsedLayout.value();
+    }
+//   smem = gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+//   if(layoutProvided && parsedLayout->toString() == smem.toString()) {
+//     fprintf(stderr, "[Allocation] parsedLayout matches smem: %s\n",
+//            smem.toString().c_str());
+//     smem = parsedLayout.value();
+//   }
+//   fprintf(stderr, "[Allocation] smem: %s\n", smem.toString().c_str());
   
   auto reps = smem.getInDimSize(StringAttr::get(ctx, "reps"));
   return smem.getTotalOutDimSize() / reps;

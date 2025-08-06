@@ -1,0 +1,30 @@
+原始布局解析结果:
+- Vector bases: [(32,)]
+- Bank bases: [(2,), (4,), (8,), (16,), (64,)] (数量: 5)
+- Segment bases: [(65,)] (数量: 1)
+----------------------------------------
+理论上总布局组合数为 120。
+将生成前 10 个组合。
+========================================
+
+Traceback (most recent call last):
+  File "/home/meiziyuan/triton/python/tutorials/05-layer-norm.py", line 392, in <module>
+    bench_layer_norm.run(save_path='.', print_data=True)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/meiziyuan/triton/python/triton/testing.py", line 392, in run
+    result_dfs.append(self._run(bench, save_path, show_plots, print_data, **kwargs))
+                      ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/meiziyuan/triton/python/triton/testing.py", line 339, in _run
+    ret = self.fn(**x_args, **{bench.line_arg: y}, **bench.args, **kwrags)
+  File "/home/meiziyuan/triton/python/tutorials/05-layer-norm.py", line 386, in bench_layer_norm
+    ms, min_ms, max_ms = triton.testing.do_bench(lambda: y.backward(dy, retain_graph=True, layout=layout), quantiles=quantiles,
+                         ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 grad_to_none=[x], rep=500)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/meiziyuan/triton/python/triton/testing.py", line 149, in do_bench
+    fn()
+    ~~^^
+  File "/home/meiziyuan/triton/python/tutorials/05-layer-norm.py", line 386, in <lambda>
+    ms, min_ms, max_ms = triton.testing.do_bench(lambda: y.backward(dy, retain_graph=True, layout=layout), quantiles=quantiles,
+                                                         ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Tensor.backward() got an unexpected keyword argument 'layout'

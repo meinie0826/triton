@@ -1966,14 +1966,14 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     if (mod) {
       auto sharedLayoutAttr =
           mod->getAttrOfType<StringAttr>("triton.shared_layout");
-        fprintf(stderr, "Utility sharedLayoutAttr: %s\n",
-               sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
-                                : "null");
+        // fprintf(stderr, "[Utility] sharedLayoutAttr: %s\n",
+        //        sharedLayoutAttr ? sharedLayoutAttr.getValue().str().c_str()
+        //                         : "null");
       if (sharedLayoutAttr) {
         parsedLayout =
             parseLinearLayoutFromString(sharedLayoutAttr.getValue(), ctx);
-            fprintf(stderr, "Utility parsedLayout: %s\n",
-                   parsedLayout ? parsedLayout->toString().c_str() : "null");
+            // fprintf(stderr, "[Utility] parsedLayout: %s\n",
+            //        parsedLayout ? parsedLayout->toString().c_str() : "null");
         if (parsedLayout) {
           smem = *parsedLayout;
           layoutProvided = true;
@@ -1982,13 +1982,18 @@ SmallVector<Value> transferWithinBlockSwizzlingImpl(
     }
   }
   
-  smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
-  if(parsedLayout->toString() == smem.toString()) {
-    fprintf(stderr, "Utility parsedLayout matches smem: %s\n",
-           smem.toString().c_str());
-    smem = parsedLayout.value();
-  }
-  fprintf(stderr, "Utility smem: %s\n", smem.toString().c_str());
+//   smem = triton::gpu::optimalSwizzling(srcLayout, dstLayout, bitwidth);
+    if(layoutProvided) 
+    {
+        // fprintf(stderr, "[Utility] use parsedLayout\n");
+        smem = parsedLayout.value();
+    }
+//   if(layoutProvided && parsedLayout->toString() == smem.toString()) {
+//     fprintf(stderr, "[Utility] parsedLayout matches smem: %s\n",
+//            smem.toString().c_str());
+//     smem = parsedLayout.value();
+//   }
+//   fprintf(stderr, "[Utility] smem: %s\n", smem.toString().c_str());
 
 
   // Extract reps from smem
