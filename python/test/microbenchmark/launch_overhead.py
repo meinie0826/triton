@@ -8,6 +8,7 @@ runtime hot path.
 import argparse
 import cProfile
 from collections import OrderedDict
+import json
 import pstats
 import time
 
@@ -48,6 +49,16 @@ def nop_args(
 def _median_p10_p90(values):
     arr = np.asarray(values, dtype=np.float64)
     return np.median(arr), np.percentile(arr, 10), np.percentile(arr, 90)
+
+
+def summarize_result(values):
+    median, p10, p90 = _median_p10_p90(values)
+    return {
+        "median_us": float(median),
+        "p10_us": float(p10),
+        "p90_us": float(p90),
+        "samples_us": [float(v) for v in values],
+    }
 
 
 def do_bench_walltime(fn, *, n_warmup=1000, n_repeat=10000, n_samples=25, profile=False, profile_lines=20):
@@ -188,11 +199,14 @@ def _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_c
 
 def print_summary(title, results):
     print(f"\n### {title}")
-    baselines = {name: _median_p10_p90(values)[0] for name, values in results.items()}
+    baselines = {name: summarize_result(values)["median_us"] for name, values in results.items()}
     total = baselines["end_to_end_getitem"]
     run_total = baselines["end_to_end_run"]
     for name, values in results.items():
-        median, p10, p90 = _median_p10_p90(values)
+        summary = summarize_result(values)
+        median = summary["median_us"]
+        p10 = summary["p10_us"]
+        p90 = summary["p90_us"]
         pct_total = 100.0 * median / total
         pct_run = 100.0 * median / run_total
         print(
@@ -208,11 +222,45 @@ def print_summary(title, results):
     print(f"{'getitem_lambda_only':>20}: median={lambda_only:8.3f} us")
 
 
+def dump_results(path, all_results, args):
+    payload = {
+        "n_repeat": args.n_repeat,
+        "n_samples": args.n_samples,
+        "n_warmup": args.n_warmup,
+        "cases": [],
+    }
+    for title, results in all_results:
+        case = {
+            "title": title,
+            "sections": {},
+        }
+        baselines = {name: summarize_result(values)["median_us"] for name, values in results.items()}
+        total = baselines["end_to_end_getitem"]
+        run_total = baselines["end_to_end_run"]
+        for name, values in results.items():
+            summary = summarize_result(values)
+            summary["share_of_getitem_pct"] = 100.0 * summary["median_us"] / total
+            summary["share_of_run_pct"] = 100.0 * summary["median_us"] / run_total
+            case["sections"][name] = summary
+        case["derived"] = {
+            "wrapper_minus_launcher_us": total - baselines["compiled_kernel_run"],
+            "host_setup_minus_launch_us": baselines["host_setup_no_launch"],
+            "getitem_lambda_only_us": total - run_total,
+        }
+        payload["cases"].append(case)
+
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"\nWrote results to {path}")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Attribute Triton steady-state Python launch overhead.")
     parser.add_argument("--n-repeat", type=int, default=10000, help="Number of timed iterations inside one sample.")
     parser.add_argument("--n-samples", type=int, default=25, help="Number of timing samples to collect.")
     parser.add_argument("--n-warmup", type=int, default=1000, help="Warmup iterations per section.")
+    parser.add_argument("--output", type=str, help="Optional JSON file path for dumping raw samples and summaries.")
     parser.add_argument("--tensor-desc-only", action="store_true", help="Run only the TensorDescriptor case.")
     parser.add_argument("--tensor-only", action="store_true", help="Run only the plain Tensor case.")
     parser.add_argument("--profile", action="store_true", help="cProfile the first end-to-end section.")
@@ -231,6 +279,7 @@ if __name__ == "__main__":
     if not args.tensor_only:
         cases.append(("TensorDescriptor inputs", True))
 
+    all_results = []
     for title, use_tensor_desc in cases:
         results = benchmark_sections(
             use_tensor_desc,
@@ -240,4 +289,7 @@ if __name__ == "__main__":
             profile=args.profile,
             profile_lines=args.profile_lines,
         )
+        all_results.append((title, results))
         print_summary(title, results)
+    if args.output:
+        dump_results(args.output, all_results, args)
