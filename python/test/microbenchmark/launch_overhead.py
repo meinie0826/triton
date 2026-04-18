@@ -19,6 +19,7 @@ import triton
 import triton.language as tl
 from triton.runtime.jit import compute_cache_key
 from triton.tools.tensor_descriptor import TensorDescriptor
+from third_party.nvidia.backend.driver import make_tensordesc_arg
 
 
 @triton.jit
@@ -127,6 +128,118 @@ def resolve_cached_kernel(kernel_fn, args, runtime_kwargs):
     return device, stream, kernel_cache, kernel_key_cache, binder, bound_args, specialization, options, kernel
 
 
+def _is_tensordesc_signature(sig):
+    return isinstance(sig, str) and sig.startswith("tensordesc")
+
+
+def _flatten_runtime_signature(signature_dict):
+    return [signature_dict[idx] for idx in sorted(signature_dict)]
+
+
+def transform_kernel_args_for_launch(signature, kernel_args, tensordesc_meta):
+    transformed = []
+    desc_idx = 0
+    for sig, arg in zip(signature, kernel_args):
+        if _is_tensordesc_signature(sig):
+            metadata = tensordesc_meta[desc_idx] if tensordesc_meta else None
+            desc_idx += 1
+            transformed.extend(make_tensordesc_arg(arg, metadata, ()))
+        else:
+            transformed.append(arg)
+    return tuple(transformed)
+
+
+def convert_pointer_args_to_raw(signature, kernel_args):
+    raw_args = []
+    for sig, arg in zip(signature, kernel_args):
+        if isinstance(sig, str) and sig.startswith("*") and hasattr(arg, "data_ptr"):
+            raw_args.append(arg.data_ptr())
+        else:
+            raw_args.append(arg)
+    return tuple(raw_args)
+
+
+def launch_via_raw_driver(launcher_obj, raw_launch, grid, stream, function, kernel_metadata, launch_metadata, kernel_args,
+                          launch_enter_hook, launch_exit_hook, *, skip_scratch=False):
+    grid_x, grid_y, grid_z = grid
+    active_driver = triton.runtime.driver.active
+
+    def allocate_scratch(size, align, allocator):
+        if skip_scratch or size <= 0:
+            return None
+        grid_size = grid_x * grid_y * grid_z
+        alloc_size = grid_size * launcher_obj.num_ctas * size
+        alloc_fn = allocator.get()
+        return alloc_fn(alloc_size, align, stream)
+
+    def allocate_default_profile_scratch(size, align):
+        if skip_scratch or size <= 0:
+            return None
+        grid_size = grid_x * grid_y * grid_z
+        alloc_size = grid_size * launcher_obj.num_ctas * size
+        return active_driver.allocate_default_profile_scratch(alloc_size, align, stream)
+
+    global_scratch = allocate_scratch(launcher_obj.global_scratch_size, launcher_obj.global_scratch_align,
+                                      triton.runtime._allocation._allocator)
+    if triton.runtime._allocation.has_profile_allocator():
+        profile_scratch = allocate_scratch(launcher_obj.profile_scratch_size, launcher_obj.profile_scratch_align,
+                                           triton.runtime._allocation._profile_allocator)
+    else:
+        profile_scratch = allocate_default_profile_scratch(launcher_obj.profile_scratch_size,
+                                                           launcher_obj.profile_scratch_align)
+
+    launch_kernel_args = kernel_args
+    if launcher_obj.gsan_enabled:
+        import triton.experimental.gsan._allocator as gsan_allocator
+        device = triton.runtime.driver.active.get_current_device()
+        gsan_state_ptr = gsan_allocator.get_global_state_pointer() + device * (1 << 30)
+        launch_kernel_args = (*kernel_args, gsan_state_ptr)
+
+    raw_launch(
+        grid_x,
+        grid_y,
+        grid_z,
+        stream,
+        function,
+        launcher_obj.launch_cooperative_grid,
+        launcher_obj.launch_pdl,
+        kernel_metadata,
+        launch_metadata,
+        launch_enter_hook,
+        launch_exit_hook,
+        global_scratch,
+        profile_scratch,
+        launcher_obj.arg_annotations,
+        launcher_obj.kernel_signature,
+        launch_kernel_args,
+    )
+
+
+def build_launch_state(kernel, bound_args, grid, stream):
+    launcher_obj = kernel.run
+    grid_size = len(grid)
+    grid_xyz = (
+        grid[0],
+        grid[1] if grid_size > 1 else 1,
+        grid[2] if grid_size > 2 else 1,
+    )
+    launch_metadata = kernel.launch_metadata(grid_xyz, stream, *bound_args.values())
+    signature = _flatten_runtime_signature(kernel.src.signature)
+    tensordesc_meta = getattr(kernel.metadata, "tensordesc_meta", None)
+    bound_arg_values = tuple(bound_args.values())
+    transformed_kernel_args = transform_kernel_args_for_launch(signature, bound_arg_values, tensordesc_meta)
+    raw_pointer_kernel_args = convert_pointer_args_to_raw(signature, bound_arg_values)
+    return {
+        "launcher_obj": launcher_obj,
+        "grid_xyz": grid_xyz,
+        "launch_metadata": launch_metadata,
+        "signature": signature,
+        "bound_arg_values": bound_arg_values,
+        "transformed_kernel_args": transformed_kernel_args,
+        "raw_pointer_kernel_args": raw_pointer_kernel_args,
+    }
+
+
 def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, n_warmup: int, profile: bool,
                        profile_lines: int):
     grid = (1, )
@@ -144,12 +257,11 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
 
     # Force module/launcher materialization outside the timed region.
     kernel._init_handles()
-    _ = kernel.run
-
-    grid_0 = grid[0]
-    grid_1 = 1
-    grid_2 = 1
-    launch_metadata = kernel.launch_metadata((grid_0, grid_1, grid_2), stream, *bound_args.values())
+    launch_state = build_launch_state(kernel, bound_args, grid, stream)
+    launcher_obj = launch_state["launcher_obj"]
+    grid_xyz = launch_state["grid_xyz"]
+    launch_metadata = launch_state["launch_metadata"]
+    raw_launch = triton.runtime.driver.active.utils.launch
 
     sections = OrderedDict([
         ("end_to_end_getitem", lambda: launcher(*args)),
@@ -162,7 +274,34 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
         ("cache_key_only", lambda: compute_cache_key(kernel_key_cache, specialization, options)),
         ("host_setup_no_launch", lambda: _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_cache,
                                                                binder, runtime_kwargs)),
-        ("compiled_kernel_run", lambda: kernel.run(grid_0, grid_1, grid_2, stream, kernel.function,
+        ("tensordesc_transform_only", lambda: transform_kernel_args_for_launch(
+            launch_state["signature"], launch_state["bound_arg_values"], getattr(kernel.metadata, "tensordesc_meta", None))),
+        ("cuda_launcher_no_tensordesc_transform", lambda: launch_via_raw_driver(
+            launcher_obj,
+            raw_launch,
+            grid_xyz,
+            stream,
+            kernel.function,
+            kernel.packed_metadata,
+            launch_metadata,
+            launch_state["transformed_kernel_args"],
+            triton.knobs.runtime.launch_enter_hook,
+            triton.knobs.runtime.launch_exit_hook,
+        )),
+        ("raw_driver_launch_pretransformed", lambda: raw_launch(
+            grid_xyz[0], grid_xyz[1], grid_xyz[2], stream, kernel.function,
+            launcher_obj.launch_cooperative_grid, launcher_obj.launch_pdl, kernel.packed_metadata,
+            launch_metadata, None, None, None, None, launcher_obj.arg_annotations,
+            launcher_obj.kernel_signature, launch_state["transformed_kernel_args"])),
+        ("raw_driver_launch_rawptr", lambda: raw_launch(
+            grid_xyz[0], grid_xyz[1], grid_xyz[2], stream, kernel.function,
+            launcher_obj.launch_cooperative_grid, launcher_obj.launch_pdl, kernel.packed_metadata,
+            launch_metadata, None, None, None, None, launcher_obj.arg_annotations,
+            launcher_obj.kernel_signature,
+            launch_state["transformed_kernel_args"]
+            if any(_is_tensordesc_signature(sig) for sig in launch_state["signature"])
+            else launch_state["raw_pointer_kernel_args"])),
+        ("compiled_kernel_run", lambda: kernel.run(grid_xyz[0], grid_xyz[1], grid_xyz[2], stream, kernel.function,
                                                    kernel.packed_metadata, launch_metadata,
                                                    triton.knobs.runtime.launch_enter_hook,
                                                    triton.knobs.runtime.launch_exit_hook, *bound_args.values())),
