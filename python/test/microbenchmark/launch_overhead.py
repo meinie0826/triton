@@ -99,23 +99,37 @@ def make_args(use_tensor_desc: bool):
     return targs, ncargs, cargs
 
 
+def make_runtime_kwargs(kernel_fn):
+    return {
+        "debug": kernel_fn.debug or triton.knobs.runtime.debug,
+        "instrumentation_mode": triton.knobs.compilation.instrumentation_mode,
+    }
+
+
+def resolve_cached_kernel(kernel_fn, args, runtime_kwargs):
+    device = triton.runtime.driver.active.get_current_device()
+    stream = triton.runtime.driver.active.get_current_stream(device)
+    kernel_cache, kernel_key_cache, _target, _backend, binder = kernel_fn.device_caches[device]
+    bound_args, specialization, options = binder(*args, **runtime_kwargs)
+    key = compute_cache_key(kernel_key_cache, specialization, options)
+    kernel = kernel_cache[key]
+    return device, stream, kernel_cache, kernel_key_cache, binder, bound_args, specialization, options, kernel
+
+
 def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, n_warmup: int, profile: bool,
                        profile_lines: int):
     grid = (1, )
     launcher = nop_args[grid]
     targs, ncargs, cargs = make_args(use_tensor_desc)
     args = (*targs, *ncargs, *cargs)
+    runtime_kwargs = make_runtime_kwargs(nop_args)
 
     print("Compiling steady-state kernel...")
     launcher(*args)
     torch.cuda.synchronize()
 
-    device = triton.runtime.driver.active.get_current_device()
-    stream = triton.runtime.driver.active.get_current_stream(device)
-    kernel_cache, kernel_key_cache, _target, _backend, binder = nop_args.device_caches[device]
-    bound_args, specialization, options = binder(*args)
-    key = compute_cache_key(kernel_key_cache, specialization, options)
-    kernel = kernel_cache[key]
+    device, stream, kernel_cache, kernel_key_cache, binder, bound_args, specialization, options, kernel = (
+        resolve_cached_kernel(nop_args, args, runtime_kwargs))
 
     # Force module/launcher materialization outside the timed region.
     kernel._init_handles()
@@ -133,10 +147,10 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
             triton.runtime.driver.active.get_current_device(),
             triton.runtime.driver.active.get_current_stream(device),
         )),
-        ("binder_only", lambda: binder(*args)),
+        ("binder_only", lambda: binder(*args, **runtime_kwargs)),
         ("cache_key_only", lambda: compute_cache_key(kernel_key_cache, specialization, options)),
         ("host_setup_no_launch", lambda: _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_cache,
-                                                               binder)),
+                                                               binder, runtime_kwargs)),
         ("compiled_kernel_run", lambda: kernel.run(grid_0, grid_1, grid_2, stream, kernel.function,
                                                    kernel.packed_metadata, launch_metadata,
                                                    triton.knobs.runtime.launch_enter_hook,
@@ -158,8 +172,8 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
     return results
 
 
-def _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_cache, binder):
-    bound_args, specialization, options = binder(*args)
+def _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_cache, binder, runtime_kwargs):
+    bound_args, specialization, options = binder(*args, **runtime_kwargs)
     key = compute_cache_key(kernel_key_cache, specialization, options)
     kernel = kernel_cache[key]
     if callable(grid):
