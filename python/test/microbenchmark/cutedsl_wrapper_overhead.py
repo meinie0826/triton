@@ -53,12 +53,6 @@ def do_bench_via_subprocess(section_name, args):
         __file__,
         "--numel",
         str(args.numel),
-        "--n-repeat",
-        str(args.n_repeat),
-        "--n-samples",
-        "1",
-        "--n-warmup",
-        str(args.n_warmup),
         "--internal-section",
         section_name,
     ]
@@ -284,13 +278,16 @@ if __name__ == "__main__":
     sections = build_benchmarks(args.numel)
 
     if args.internal_section:
-        values_ms = do_bench_walltime(
-            sections[args.internal_section],
-            n_warmup=args.n_warmup,
-            n_repeat=args.n_repeat,
-            n_samples=args.n_samples,
-        )
-        print(json.dumps(summarize_result(values_ms * 1000.0)))
+        start_time = time.perf_counter()
+        sections[args.internal_section]()
+        end_time = time.perf_counter()
+        elapsed_us = (end_time - start_time) * 1e6
+        print(json.dumps({
+            "median_us": elapsed_us,
+            "p10_us": elapsed_us,
+            "p90_us": elapsed_us,
+            "samples_us": [elapsed_us],
+        }))
         sys.exit(0)
 
     results = OrderedDict()
