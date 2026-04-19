@@ -2,6 +2,7 @@ import argparse
 from collections import OrderedDict
 import importlib
 import json
+import subprocess
 from pathlib import Path
 import sys
 import time
@@ -43,6 +44,32 @@ def do_bench_walltime(fn, *, n_warmup=1000, n_repeat=10000, n_samples=25):
         end_time = time.perf_counter()
         mses.append((end_time - start_time) * 1e3 / n_repeat)
     return np.asarray(mses)
+
+
+def do_bench_via_subprocess(section_name, args):
+    values_us = []
+    base_cmd = [
+        sys.executable,
+        __file__,
+        "--numel",
+        str(args.numel),
+        "--n-repeat",
+        str(args.n_repeat),
+        "--n-samples",
+        "1",
+        "--n-warmup",
+        str(args.n_warmup),
+        "--internal-section",
+        section_name,
+    ]
+    if args.cutlass_root is not None:
+        base_cmd.extend(["--cutlass-root", args.cutlass_root])
+
+    for _ in range(args.n_samples):
+        proc = subprocess.run(base_cmd, check=True, capture_output=True, text=True)
+        payload = json.loads(proc.stdout)
+        values_us.append(payload["median_us"])
+    return np.asarray(values_us, dtype=np.float64) / 1000.0
 
 
 def setup_cutlass_python(cutlass_root=None):
@@ -247,6 +274,7 @@ def parse_args():
     parser.add_argument("--n-samples", type=int, default=25)
     parser.add_argument("--n-warmup", type=int, default=1000)
     parser.add_argument("--output", type=str, help="Optional JSON file path for dumping raw samples and summaries.")
+    parser.add_argument("--internal-section", type=str, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -254,15 +282,29 @@ if __name__ == "__main__":
     args = parse_args()
     cutlass_source = setup_cutlass_python(args.cutlass_root)
     sections = build_benchmarks(args.numel)
-    results = OrderedDict()
-    for name, fn in sections.items():
-        print(f"\n== {name} ==")
+
+    if args.internal_section:
         values_ms = do_bench_walltime(
-            fn,
+            sections[args.internal_section],
             n_warmup=args.n_warmup,
             n_repeat=args.n_repeat,
             n_samples=args.n_samples,
         )
+        print(json.dumps(summarize_result(values_ms * 1000.0)))
+        sys.exit(0)
+
+    results = OrderedDict()
+    for name, fn in sections.items():
+        print(f"\n== {name} ==")
+        if name.startswith("tma_prepare_"):
+            values_ms = do_bench_via_subprocess(name, args)
+        else:
+            values_ms = do_bench_walltime(
+                fn,
+                n_warmup=args.n_warmup,
+                n_repeat=args.n_repeat,
+                n_samples=args.n_samples,
+            )
         results[name] = values_ms * 1000.0
 
     print_summary(results)
