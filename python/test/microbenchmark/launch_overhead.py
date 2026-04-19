@@ -275,7 +275,7 @@ def launch_via_raw_driver(launcher_obj, raw_launch, grid, stream, function, kern
     )
 
 
-def build_launch_state(kernel, bound_args, grid, stream):
+def build_launch_state(kernel, bound_args, original_args, grid, stream):
     launcher_obj = kernel.run
     grid_size = len(grid)
     grid_xyz = (
@@ -286,15 +286,16 @@ def build_launch_state(kernel, bound_args, grid, stream):
     launch_metadata = kernel.launch_metadata(grid_xyz, stream, *bound_args.values())
     signature = _flatten_runtime_signature(kernel.src.signature)
     tensordesc_meta = getattr(kernel.metadata, "tensordesc_meta", None)
-    bound_arg_values = tuple(bound_args.values())
-    transformed_kernel_args = transform_kernel_args_for_launch(signature, bound_arg_values, tensordesc_meta)
-    raw_pointer_kernel_args = convert_pointer_args_to_raw(signature, bound_arg_values)
+    raw_arg_values = tuple(original_args)
+    transformed_kernel_args = transform_kernel_args_for_launch(signature, raw_arg_values, tensordesc_meta)
+    raw_pointer_kernel_args = convert_pointer_args_to_raw(signature, raw_arg_values)
     return {
         "launcher_obj": launcher_obj,
         "grid_xyz": grid_xyz,
         "launch_metadata": launch_metadata,
         "signature": signature,
-        "bound_arg_values": bound_arg_values,
+        "bound_arg_values": tuple(bound_args.values()),
+        "raw_arg_values": raw_arg_values,
         "transformed_kernel_args": transformed_kernel_args,
         "raw_pointer_kernel_args": raw_pointer_kernel_args,
     }
@@ -317,7 +318,7 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
 
     # Force module/launcher materialization outside the timed region.
     kernel._init_handles()
-    launch_state = build_launch_state(kernel, bound_args, grid, stream)
+    launch_state = build_launch_state(kernel, bound_args, args, grid, stream)
     launcher_obj = launch_state["launcher_obj"]
     grid_xyz = launch_state["grid_xyz"]
     launch_metadata = launch_state["launch_metadata"]
