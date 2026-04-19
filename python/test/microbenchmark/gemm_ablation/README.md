@@ -25,6 +25,18 @@ PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --comp
 PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --compare eviction --M 4096 --N 4096 --K 4096
 ```
 
+Run a larger built-in shape sweep:
+
+```bash
+PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --compare tma --shape-set large
+```
+
+Run custom shapes:
+
+```bash
+PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --compare tma --shapes 4096x4096x4096\;8192x8192x4096\;16384x8192x4096
+```
+
 Results are written to `python/test/microbenchmark/gemm_ablation/results/` by default.
 
 ## Notes

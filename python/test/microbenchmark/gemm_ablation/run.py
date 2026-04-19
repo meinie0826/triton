@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +23,24 @@ except ImportError:
 
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
+
+DEFAULT_SHAPE_SETS = {
+    "large": [
+        (4096, 4096, 4096),
+        (8192, 8192, 4096),
+        (8192, 8192, 8192),
+        (16384, 8192, 4096),
+        (8192, 16384, 4096),
+        (4096, 16384, 8192),
+        (16384, 4096, 8192),
+    ],
+    "square": [
+        (4096, 4096, 4096),
+        (8192, 8192, 8192),
+        (12288, 12288, 12288),
+        (16384, 16384, 8192),
+    ],
+}
 
 
 def is_cuda() -> bool:
@@ -267,7 +285,7 @@ def select_variants(compare: str, tma_available: bool):
     return variants
 
 
-def run_variant(variant, a, b, b_t, ref, args):
+def run_variant(variant, a, b, b_t, ref, m, n, k, args):
     fn = (lambda: launch_tma(a, b_t, variant=variant, args=args)) if variant.use_tma else (
         lambda: launch_no_tma(a, b, variant=variant, args=args)
     )
@@ -276,8 +294,11 @@ def run_variant(variant, a, b, b_t, ref, args):
     max_abs = (out - ref).abs().max().item()
     mean_abs = (out - ref).abs().mean().item()
     latency_ms = triton.testing.do_bench(fn, warmup=args.warmup, rep=args.rep)
-    tflops = 2 * args.M * args.N * args.K * 1e-12 / (latency_ms * 1e-3)
+    tflops = 2 * m * n * k * 1e-12 / (latency_ms * 1e-3)
     return {
+        "M": m,
+        "N": n,
+        "K": k,
         "variant": variant.name,
         "use_tma": variant.use_tma,
         "use_l2opt": variant.use_grouped_order,
@@ -313,6 +334,13 @@ def parse_args():
     p.add_argument("--M", type=int, default=4096)
     p.add_argument("--N", type=int, default=4096)
     p.add_argument("--K", type=int, default=4096)
+    p.add_argument("--shape-set", choices=sorted(DEFAULT_SHAPE_SETS.keys()), default=None)
+    p.add_argument(
+        "--shapes",
+        type=str,
+        default=None,
+        help="Semicolon-separated MxNxK list, for example: 4096x4096x4096;8192x8192x4096",
+    )
     p.add_argument("--block-m", type=int, default=128)
     p.add_argument("--block-n", type=int, default=128)
     p.add_argument("--block-k", type=int, default=64)
@@ -329,30 +357,56 @@ def parse_args():
     return p.parse_args()
 
 
+def parse_shapes_arg(spec: str):
+    shapes = []
+    for chunk in spec.split(";"):
+        item = chunk.strip().lower().replace(",", "x")
+        if not item:
+            continue
+        parts = item.split("x")
+        if len(parts) != 3:
+            raise ValueError(f"invalid shape spec: {chunk}")
+        shapes.append(tuple(int(v) for v in parts))
+    if not shapes:
+        raise ValueError("no valid shapes were provided")
+    return shapes
+
+
+def resolve_shapes(args):
+    if args.shapes:
+        return parse_shapes_arg(args.shapes)
+    if args.shape_set:
+        return DEFAULT_SHAPE_SETS[args.shape_set]
+    return [(args.M, args.N, args.K)]
+
+
 def main():
     args = parse_args()
     assert torch.cuda.is_available(), "CUDA device is required"
     assert is_cuda(), "This benchmark currently targets CUDA"
     dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float16
-    torch.manual_seed(args.seed)
-    a = torch.randn((args.M, args.K), device="cuda", dtype=dtype)
-    b = torch.randn((args.K, args.N), device="cuda", dtype=dtype)
-    b_t = b.T.contiguous() if supports_tma() else None
-    ref = torch.matmul(a, b)
     variants = select_variants(args.compare, supports_tma())
-    rows = [run_variant(v, a, b, b_t, ref, args) for v in variants]
-
-    baseline = rows[0]["latency_ms"]
-    base_no_tma = next((r["latency_ms"] for r in rows if r["variant"] == "gemm_wo_tma_wo_l2opt"), None)
-    base_no_l2 = base_no_tma
-    for row in rows:
-        row["speedup_vs_baseline"] = f"{baseline / row['latency_ms']:.4f}x"
-        row["speedup_vs_wo_tma"] = ""
-        row["speedup_vs_wo_l2opt"] = ""
-        if row["use_tma"] and not row["use_l2opt"] and base_no_tma is not None:
-            row["speedup_vs_wo_tma"] = f"{base_no_tma / row['latency_ms']:.4f}x"
-        if row["use_l2opt"] and not row["use_tma"] and base_no_l2 is not None:
-            row["speedup_vs_wo_l2opt"] = f"{base_no_l2 / row['latency_ms']:.4f}x"
+    shapes = resolve_shapes(args)
+    rows = []
+    for idx, (m, n, k) in enumerate(shapes):
+        torch.manual_seed(args.seed + idx)
+        a = torch.randn((m, k), device="cuda", dtype=dtype)
+        b = torch.randn((k, n), device="cuda", dtype=dtype)
+        b_t = b.T.contiguous() if supports_tma() else None
+        ref = torch.matmul(a, b)
+        shape_rows = [run_variant(v, a, b, b_t, ref, m, n, k, args) for v in variants]
+        baseline = shape_rows[0]["latency_ms"]
+        base_no_tma = next((r["latency_ms"] for r in shape_rows if r["variant"] == "gemm_wo_tma_wo_l2opt"), None)
+        base_no_l2 = base_no_tma
+        for row in shape_rows:
+            row["speedup_vs_baseline"] = f"{baseline / row['latency_ms']:.4f}x"
+            row["speedup_vs_wo_tma"] = ""
+            row["speedup_vs_wo_l2opt"] = ""
+            if row["use_tma"] and not row["use_l2opt"] and base_no_tma is not None:
+                row["speedup_vs_wo_tma"] = f"{base_no_tma / row['latency_ms']:.4f}x"
+            if row["use_l2opt"] and not row["use_tma"] and base_no_l2 is not None:
+                row["speedup_vs_wo_l2opt"] = f"{base_no_l2 / row['latency_ms']:.4f}x"
+        rows.extend(shape_rows)
 
     csv_path, json_path = args.csv, args.json
     if csv_path is None or json_path is None:
@@ -363,18 +417,20 @@ def main():
     meta = {
         "device": torch.cuda.get_device_name(),
         "supports_tma": supports_tma(),
+        "shape_count": len(shapes),
+        "shapes": shapes,
         "args": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
     }
     write_outputs(rows, meta, csv_path, json_path)
 
     print(f"# csv={csv_path}")
     print(f"# json={json_path}")
-    print("variant, use_tma, use_l2opt, load_cache, store_cache, load_eviction, store_eviction, latency_ms, tflops, max_abs_err, mean_abs_err, speedup_vs_baseline, speedup_vs_wo_tma, speedup_vs_wo_l2opt")
+    print("M, N, K, variant, use_tma, use_l2opt, load_cache, store_cache, load_eviction, store_eviction, latency_ms, tflops, max_abs_err, mean_abs_err, speedup_vs_baseline, speedup_vs_wo_tma, speedup_vs_wo_l2opt")
     for row in rows:
         print(
-            f"{row['variant']}, {row['use_tma']}, {row['use_l2opt']}, {row['load_cache']}, {row['store_cache']}, "
-            f"{row['load_eviction']}, {row['store_eviction']}, {row['latency_ms']:.6f}, {row['tflops']:.3f}, "
-            f"{row['max_abs_err']:.6f}, {row['mean_abs_err']:.6f}, {row['speedup_vs_baseline']}, "
+            f"{row['M']}, {row['N']}, {row['K']}, {row['variant']}, {row['use_tma']}, {row['use_l2opt']}, "
+            f"{row['load_cache']}, {row['store_cache']}, {row['load_eviction']}, {row['store_eviction']}, "
+            f"{row['latency_ms']:.6f}, {row['tflops']:.3f}, {row['max_abs_err']:.6f}, {row['mean_abs_err']:.6f}, {row['speedup_vs_baseline']}, "
             f"{row['speedup_vs_wo_tma']}, {row['speedup_vs_wo_l2opt']}"
         )
 
