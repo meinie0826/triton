@@ -2,7 +2,6 @@ import argparse
 from collections import OrderedDict
 import importlib
 import json
-import subprocess
 from pathlib import Path
 import sys
 import time
@@ -44,32 +43,6 @@ def do_bench_walltime(fn, *, n_warmup=1000, n_repeat=10000, n_samples=25):
         end_time = time.perf_counter()
         mses.append((end_time - start_time) * 1e3 / n_repeat)
     return np.asarray(mses)
-
-
-def do_bench_via_subprocess(section_name, args):
-    values_us = []
-    base_cmd = [
-        sys.executable,
-        __file__,
-        "--numel",
-        str(args.numel),
-        "--internal-section",
-        section_name,
-    ]
-    if args.cutlass_root is not None:
-        base_cmd.extend(["--cutlass-root", args.cutlass_root])
-
-    for _ in range(args.n_samples):
-        try:
-            proc = subprocess.run(base_cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as exc:
-            stderr = (exc.stderr or "").strip()
-            stdout = (exc.stdout or "").strip()
-            detail = stderr or stdout or f"subprocess exited with return code {exc.returncode}"
-            raise RuntimeError(f"{section_name} failed in isolated subprocess: {detail}") from exc
-        payload = json.loads(proc.stdout)
-        values_us.append(payload["median_us"])
-    return np.asarray(values_us, dtype=np.float64) / 1000.0
 
 
 def setup_cutlass_python(cutlass_root=None):
@@ -129,7 +102,6 @@ def build_benchmarks(numel):
 
     try:
         import cutlass.utils.blackwell_helpers as sm100_utils
-        from cutlass._mlir import ir
         from cutlass.cute.nvgpu import tcgen05
 
         mma_inst_shape_mnk = (128, 256, 16)
@@ -137,66 +109,82 @@ def build_benchmarks(numel):
         ab_stages = 4
         a_torch = torch.zeros((mma_tiler_mnk[0], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
         b_torch = torch.zeros((mma_tiler_mnk[1], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
-        a_cute = from_dlpack(a_torch, assumed_align=32, enable_tvm_ffi=True)
-        b_cute = from_dlpack(b_torch, assumed_align=32, enable_tvm_ffi=True)
 
-        def prepare_tma_tensors(a_tensor, b_tensor):
-            with ir.Context(), ir.Location.unknown():
-                mma_op = tcgen05.MmaF16BF16Op(
-                    cutlass.Float16,
-                    cutlass.Float32,
-                    mma_inst_shape_mnk,
-                    tcgen05.CtaGroup.ONE,
-                    tcgen05.OperandSource.SMEM,
-                    tcgen05.OperandMajorMode.K,
-                    tcgen05.OperandMajorMode.K,
-                )
-                tiled_mma = cute.make_tiled_mma(mma_op)
-                a_smem_layout = sm100_utils.make_smem_layout_a(
-                    tiled_mma,
-                    mma_tiler_mnk,
-                    a_tensor.element_type,
-                    ab_stages,
-                )
-                b_smem_layout = sm100_utils.make_smem_layout_b(
-                    tiled_mma,
-                    mma_tiler_mnk,
-                    b_tensor.element_type,
-                    ab_stages,
-                )
-                a_smem_layout_one_stage = cute.select(a_smem_layout, mode=[0, 1, 2])
-                b_smem_layout_one_stage = cute.select(b_smem_layout, mode=[0, 1, 2])
-                tma_load_op = cute.nvgpu.cpasync.CopyBulkTensorTileG2SOp(tcgen05.CtaGroup.ONE)
-                a_tma_atom, a_tma_tensor = cute.nvgpu.make_tiled_tma_atom_A(
-                    tma_load_op,
-                    a_tensor,
-                    a_smem_layout_one_stage,
-                    mma_tiler_mnk,
-                    tiled_mma,
-                )
-                b_tma_atom, b_tma_tensor = cute.nvgpu.make_tiled_tma_atom_B(
-                    tma_load_op,
-                    b_tensor,
-                    b_smem_layout_one_stage,
-                    mma_tiler_mnk,
-                    tiled_mma,
-                )
-                # Keep the benchmark focused on host-side TMA preparation cost
-                # without leaking MLIR objects outside the context lifetime.
-                return (
-                    cute.rank(a_tma_tensor.layout),
-                    cute.rank(b_tma_tensor.layout),
-                    cute.size(a_tma_tensor),
-                    cute.size(b_tma_tensor),
-                    cute.rank(tiled_mma),
-                    type(a_tma_atom).__name__,
-                    type(b_tma_atom).__name__,
-                )
+        def make_runtime_tma_tensor(t):
+            return (
+                from_dlpack(t, assumed_align=32, enable_tvm_ffi=True)
+                .mark_layout_dynamic(leading_dim=1)
+                .mark_compact_shape_dynamic(mode=1, divisibility=t.shape[1])
+            )
 
-        sections["tma_prepare_only_prebuilt"] = lambda: prepare_tma_tensors(a_cute, b_cute)
-        sections["tma_prepare_from_dlpack_each_time"] = lambda: prepare_tma_tensors(
-            from_dlpack(a_torch, assumed_align=32, enable_tvm_ffi=True),
-            from_dlpack(b_torch, assumed_align=32, enable_tvm_ffi=True),
+        a_cute = make_runtime_tma_tensor(a_torch)
+        b_cute = make_runtime_tma_tensor(b_torch)
+
+        @cute.kernel
+        def nop_tma_kernel(
+            tma_atom_a: cute.CopyAtom,
+            mA_mkl: cute.Tensor,
+            tma_atom_b: cute.CopyAtom,
+            mB_nkl: cute.Tensor,
+        ):
+            pass
+
+        @cute.jit
+        def tma_host_wrapper(a: cute.Tensor, b: cute.Tensor):
+            mma_op = tcgen05.MmaF16BF16Op(
+                cutlass.Float16,
+                cutlass.Float32,
+                mma_inst_shape_mnk,
+                tcgen05.CtaGroup.ONE,
+                tcgen05.OperandSource.SMEM,
+                tcgen05.OperandMajorMode.K,
+                tcgen05.OperandMajorMode.K,
+            )
+            tiled_mma = cute.make_tiled_mma(mma_op)
+            a_smem_layout = sm100_utils.make_smem_layout_a(
+                tiled_mma,
+                mma_tiler_mnk,
+                a.element_type,
+                ab_stages,
+            )
+            b_smem_layout = sm100_utils.make_smem_layout_b(
+                tiled_mma,
+                mma_tiler_mnk,
+                b.element_type,
+                ab_stages,
+            )
+            a_smem_layout_one_stage = cute.select(a_smem_layout, mode=[0, 1, 2])
+            b_smem_layout_one_stage = cute.select(b_smem_layout, mode=[0, 1, 2])
+            tma_load_op = cute.nvgpu.cpasync.CopyBulkTensorTileG2SOp(tcgen05.CtaGroup.ONE)
+            a_tma_atom, a_tma_tensor = cute.nvgpu.make_tiled_tma_atom_A(
+                tma_load_op,
+                a,
+                a_smem_layout_one_stage,
+                mma_tiler_mnk,
+                tiled_mma,
+            )
+            b_tma_atom, b_tma_tensor = cute.nvgpu.make_tiled_tma_atom_B(
+                tma_load_op,
+                b,
+                b_smem_layout_one_stage,
+                mma_tiler_mnk,
+                tiled_mma,
+            )
+            nop_tma_kernel(
+                a_tma_atom,
+                a_tma_tensor,
+                b_tma_atom,
+                b_tma_tensor,
+            ).launch(grid=[1, 1, 1], block=[1, 1, 1])
+
+        fake_a = make_fake_compact_tensor(cutlass.Float16, tuple(a_torch.shape), stride_order=(1, 0))
+        fake_b = make_fake_compact_tensor(cutlass.Float16, tuple(b_torch.shape), stride_order=(1, 0))
+        compiled_tma = cute.compile(tma_host_wrapper, fake_a, fake_b, options="--enable-tvm-ffi")
+
+        sections["tma_host_end_to_end_prebuilt"] = lambda: compiled_tma(a_cute, b_cute)
+        sections["tma_host_end_to_end_build_each_time"] = lambda: compiled_tma(
+            make_runtime_tma_tensor(a_torch),
+            make_runtime_tma_tensor(b_torch),
         )
     except Exception as exc:
         print(f"Skipping CuTeDSL TMA prepare benchmarks: {exc}")
@@ -221,12 +209,12 @@ def print_summary(results, skipped_sections):
     print(f"{'dlpack_wrapper_delta':>32}: median={total - baselines['tensor_end_to_end_prebuilt']:8.3f} us")
     print(f"{'raw_ptr_wrapper_delta':>32}: median={baselines['raw_ptr_end_to_end_build_each_time'] - raw_ptr:8.3f} us")
     print(f"{'torch_tensor_vs_raw_ptr':>32}: median={total - raw_ptr:8.3f} us")
-    if "tma_prepare_only_prebuilt" in baselines:
-        print(f"{'tma_prepare_only_prebuilt':>32}: median={baselines['tma_prepare_only_prebuilt']:8.3f} us")
-    if "tma_prepare_from_dlpack_each_time" in baselines:
+    if "tma_host_end_to_end_prebuilt" in baselines:
+        print(f"{'tma_host_end_to_end_prebuilt':>32}: median={baselines['tma_host_end_to_end_prebuilt']:8.3f} us")
+    if "tma_host_end_to_end_build_each_time" in baselines:
         print(
-            f"{'tma_prepare_from_dlpack_delta':>32}: "
-            f"median={baselines['tma_prepare_from_dlpack_each_time'] - baselines['tma_prepare_only_prebuilt']:8.3f} us"
+            f"{'tma_host_from_dlpack_delta':>32}: "
+            f"median={baselines['tma_host_end_to_end_build_each_time'] - baselines['tma_host_end_to_end_prebuilt']:8.3f} us"
         )
     for name, reason in skipped_sections.items():
         print(f"{name:>32}: skipped ({reason})")
@@ -255,11 +243,11 @@ def dump_results(path, results, skipped_sections, args, cutlass_source):
         summary = summarize_result(values)
         summary["share_of_torch_tensor_pct"] = 100.0 * summary["median_us"] / total
         payload["sections"][name] = summary
-    if "tma_prepare_only_prebuilt" in baselines:
-        payload["derived"]["tma_prepare_only_prebuilt_us"] = baselines["tma_prepare_only_prebuilt"]
-    if "tma_prepare_from_dlpack_each_time" in baselines:
-        payload["derived"]["tma_prepare_from_dlpack_delta_us"] = (
-            baselines["tma_prepare_from_dlpack_each_time"] - baselines["tma_prepare_only_prebuilt"]
+    if "tma_host_end_to_end_prebuilt" in baselines:
+        payload["derived"]["tma_host_end_to_end_prebuilt_us"] = baselines["tma_host_end_to_end_prebuilt"]
+    if "tma_host_end_to_end_build_each_time" in baselines:
+        payload["derived"]["tma_host_from_dlpack_delta_us"] = (
+            baselines["tma_host_end_to_end_build_each_time"] - baselines["tma_host_end_to_end_prebuilt"]
         )
 
     with open(path, "w") as f:
@@ -277,7 +265,6 @@ def parse_args():
     parser.add_argument("--n-samples", type=int, default=25)
     parser.add_argument("--n-warmup", type=int, default=1000)
     parser.add_argument("--output", type=str, help="Optional JSON file path for dumping raw samples and summaries.")
-    parser.add_argument("--internal-section", type=str, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -286,33 +273,17 @@ if __name__ == "__main__":
     cutlass_source = setup_cutlass_python(args.cutlass_root)
     sections = build_benchmarks(args.numel)
 
-    if args.internal_section:
-        start_time = time.perf_counter()
-        sections[args.internal_section]()
-        end_time = time.perf_counter()
-        elapsed_us = (end_time - start_time) * 1e6
-        print(json.dumps({
-            "median_us": elapsed_us,
-            "p10_us": elapsed_us,
-            "p90_us": elapsed_us,
-            "samples_us": [elapsed_us],
-        }))
-        sys.exit(0)
-
     results = OrderedDict()
     skipped_sections = OrderedDict()
     for name, fn in sections.items():
         print(f"\n== {name} ==")
         try:
-            if name.startswith("tma_prepare_"):
-                values_ms = do_bench_via_subprocess(name, args)
-            else:
-                values_ms = do_bench_walltime(
-                    fn,
-                    n_warmup=args.n_warmup,
-                    n_repeat=args.n_repeat,
-                    n_samples=args.n_samples,
-                )
+            values_ms = do_bench_walltime(
+                fn,
+                n_warmup=args.n_warmup,
+                n_repeat=args.n_repeat,
+                n_samples=args.n_samples,
+            )
         except Exception as exc:
             skipped_sections[name] = str(exc)
             print(f"Skipping {name}: {exc}")
