@@ -60,7 +60,13 @@ def do_bench_via_subprocess(section_name, args):
         base_cmd.extend(["--cutlass-root", args.cutlass_root])
 
     for _ in range(args.n_samples):
-        proc = subprocess.run(base_cmd, check=True, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(base_cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            detail = stderr or stdout or f"subprocess exited with return code {exc.returncode}"
+            raise RuntimeError(f"{section_name} failed in isolated subprocess: {detail}") from exc
         payload = json.loads(proc.stdout)
         values_us.append(payload["median_us"])
     return np.asarray(values_us, dtype=np.float64) / 1000.0
@@ -198,7 +204,7 @@ def build_benchmarks(numel):
     return sections
 
 
-def print_summary(results):
+def print_summary(results, skipped_sections):
     print("\n### CuTeDSL Wrapper")
     baselines = {name: summarize_result(values)["median_us"] for name, values in results.items()}
     total = baselines["tensor_end_to_end_torch"]
@@ -222,9 +228,11 @@ def print_summary(results):
             f"{'tma_prepare_from_dlpack_delta':>32}: "
             f"median={baselines['tma_prepare_from_dlpack_each_time'] - baselines['tma_prepare_only_prebuilt']:8.3f} us"
         )
+    for name, reason in skipped_sections.items():
+        print(f"{name:>32}: skipped ({reason})")
 
 
-def dump_results(path, results, args, cutlass_source):
+def dump_results(path, results, skipped_sections, args, cutlass_source):
     baselines = {name: summarize_result(values)["median_us"] for name, values in results.items()}
     payload = {
         "framework": "cutedsl",
@@ -235,6 +243,7 @@ def dump_results(path, results, args, cutlass_source):
         "n_samples": args.n_samples,
         "n_warmup": args.n_warmup,
         "sections": {},
+        "skipped_sections": skipped_sections,
         "derived": {
             "dlpack_wrapper_delta_us": baselines["tensor_end_to_end_torch"] - baselines["tensor_end_to_end_prebuilt"],
             "raw_ptr_wrapper_delta_us": baselines["raw_ptr_end_to_end_build_each_time"] - baselines["raw_ptr_end_to_end_prebuilt"],
@@ -291,19 +300,25 @@ if __name__ == "__main__":
         sys.exit(0)
 
     results = OrderedDict()
+    skipped_sections = OrderedDict()
     for name, fn in sections.items():
         print(f"\n== {name} ==")
-        if name.startswith("tma_prepare_"):
-            values_ms = do_bench_via_subprocess(name, args)
-        else:
-            values_ms = do_bench_walltime(
-                fn,
-                n_warmup=args.n_warmup,
-                n_repeat=args.n_repeat,
-                n_samples=args.n_samples,
-            )
+        try:
+            if name.startswith("tma_prepare_"):
+                values_ms = do_bench_via_subprocess(name, args)
+            else:
+                values_ms = do_bench_walltime(
+                    fn,
+                    n_warmup=args.n_warmup,
+                    n_repeat=args.n_repeat,
+                    n_samples=args.n_samples,
+                )
+        except Exception as exc:
+            skipped_sections[name] = str(exc)
+            print(f"Skipping {name}: {exc}")
+            continue
         results[name] = values_ms * 1000.0
 
-    print_summary(results)
+    print_summary(results, skipped_sections)
     if args.output:
-        dump_results(args.output, results, args, cutlass_source)
+        dump_results(args.output, results, skipped_sections, args, cutlass_source)
