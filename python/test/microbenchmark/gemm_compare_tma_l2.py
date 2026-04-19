@@ -4,11 +4,15 @@ Controlled GEMM benchmark for TMA and L2-ordering comparisons.
 This script keeps the tile shape and launch parameters fixed, then compares:
 1. gemm_wo_tma vs gemm_w_tma
 2. gemm_wo_l2opt vs gemm_w_l2opt
+3. cache hint ablations on tl.load/tl.store
+4. eviction policy ablations on tl.load/tl.store
 
 Examples:
   python python/test/microbenchmark/gemm_compare_tma_l2.py --M 8192 --N 8192 --K 8192
   python python/test/microbenchmark/gemm_compare_tma_l2.py --compare tma --M 4096 --N 8192 --K 8192
   python python/test/microbenchmark/gemm_compare_tma_l2.py --compare l2 --M 4096 --N 8192 --K 8192 --csv /tmp/gemm.csv
+  python python/test/microbenchmark/gemm_compare_tma_l2.py --compare cache --M 4096 --N 4096 --K 4096
+  python python/test/microbenchmark/gemm_compare_tma_l2.py --compare eviction --M 4096 --N 4096 --K 4096
 """
 
 from __future__ import annotations
@@ -71,6 +75,10 @@ def matmul_kernel_no_tma(
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
     USE_GROUPED_ORDER: tl.constexpr,
+    LOAD_CACHE_MODIFIER: tl.constexpr,
+    STORE_CACHE_MODIFIER: tl.constexpr,
+    LOAD_EVICTION_POLICY: tl.constexpr,
+    STORE_EVICTION_POLICY: tl.constexpr,
 ):
     tile_id = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
@@ -91,8 +99,20 @@ def matmul_kernel_no_tma(
 
     acc = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+        a = tl.load(
+            a_ptrs,
+            mask=offs_k[None, :] < K - k * BLOCK_SIZE_K,
+            other=0.0,
+            cache_modifier=LOAD_CACHE_MODIFIER,
+            eviction_policy=LOAD_EVICTION_POLICY,
+        )
+        b = tl.load(
+            b_ptrs,
+            mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
+            other=0.0,
+            cache_modifier=LOAD_CACHE_MODIFIER,
+            eviction_policy=LOAD_EVICTION_POLICY,
+        )
         acc = tl.dot(a, b, acc)
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
@@ -102,7 +122,13 @@ def matmul_kernel_no_tma(
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     c_ptrs = c_ptr + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
+    tl.store(
+        c_ptrs,
+        c,
+        mask=c_mask,
+        cache_modifier=STORE_CACHE_MODIFIER,
+        eviction_policy=STORE_EVICTION_POLICY,
+    )
 
 
 @triton.jit
@@ -142,7 +168,17 @@ def matmul_kernel_tma(
     c_desc.store([offs_am, offs_bn], c)
 
 
-def launch_no_tma(a: torch.Tensor, b: torch.Tensor, *, use_grouped_order: bool, args) -> torch.Tensor:
+def launch_no_tma(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    *,
+    use_grouped_order: bool,
+    load_cache_modifier: str,
+    store_cache_modifier: str,
+    load_eviction_policy: str,
+    store_eviction_policy: str,
+    args,
+) -> torch.Tensor:
     m, k = a.shape
     _, n = b.shape
     c = torch.empty((m, n), device=a.device, dtype=a.dtype)
@@ -165,6 +201,10 @@ def launch_no_tma(a: torch.Tensor, b: torch.Tensor, *, use_grouped_order: bool, 
         BLOCK_SIZE_K=args.block_k,
         GROUP_SIZE_M=args.group_m,
         USE_GROUPED_ORDER=use_grouped_order,
+        LOAD_CACHE_MODIFIER=load_cache_modifier,
+        STORE_CACHE_MODIFIER=store_cache_modifier,
+        LOAD_EVICTION_POLICY=load_eviction_policy,
+        STORE_EVICTION_POLICY=store_eviction_policy,
         num_warps=args.num_warps,
         num_stages=args.num_stages,
     )
@@ -208,6 +248,10 @@ class Variant:
     name: str
     use_tma: bool
     use_grouped_order: bool
+    load_cache_modifier: str = ""
+    store_cache_modifier: str = ""
+    load_eviction_policy: str = ""
+    store_eviction_policy: str = ""
 
 
 def benchmark_variant(variant: Variant, a: torch.Tensor, b: torch.Tensor, b_t: torch.Tensor | None, args):
@@ -215,7 +259,16 @@ def benchmark_variant(variant: Variant, a: torch.Tensor, b: torch.Tensor, b_t: t
         assert b_t is not None
         fn = lambda: launch_tma(a, b_t, use_grouped_order=variant.use_grouped_order, args=args)
     else:
-        fn = lambda: launch_no_tma(a, b, use_grouped_order=variant.use_grouped_order, args=args)
+        fn = lambda: launch_no_tma(
+            a,
+            b,
+            use_grouped_order=variant.use_grouped_order,
+            load_cache_modifier=variant.load_cache_modifier,
+            store_cache_modifier=variant.store_cache_modifier,
+            load_eviction_policy=variant.load_eviction_policy,
+            store_eviction_policy=variant.store_eviction_policy,
+            args=args,
+        )
     ms = triton.testing.do_bench(fn, warmup=args.warmup, rep=args.rep)
     tflops = 2 * args.M * args.N * args.K * 1e-12 / (ms * 1e-3)
     return ms, tflops
@@ -225,7 +278,16 @@ def validate_variant(variant: Variant, a: torch.Tensor, b: torch.Tensor, b_t: to
     if variant.use_tma:
         out = launch_tma(a, b_t, use_grouped_order=variant.use_grouped_order, args=args)
     else:
-        out = launch_no_tma(a, b, use_grouped_order=variant.use_grouped_order, args=args)
+        out = launch_no_tma(
+            a,
+            b,
+            use_grouped_order=variant.use_grouped_order,
+            load_cache_modifier=variant.load_cache_modifier,
+            store_cache_modifier=variant.store_cache_modifier,
+            load_eviction_policy=variant.load_eviction_policy,
+            store_eviction_policy=variant.store_eviction_policy,
+            args=args,
+        )
     torch.cuda.synchronize()
     max_abs = (out - ref).abs().max().item()
     mean_abs = (out - ref).abs().mean().item()
@@ -243,6 +305,32 @@ def select_variants(compare: str, tma_available: bool) -> list[Variant]:
         all_variants = [v for v in all_variants if not v.use_grouped_order]
     elif compare == "l2":
         all_variants = [v for v in all_variants if not v.use_tma]
+    elif compare == "cache":
+        all_variants = [
+            Variant("gemm_cache_none", use_tma=False, use_grouped_order=False),
+            Variant("gemm_cache_load_cg", use_tma=False, use_grouped_order=False, load_cache_modifier=".cg"),
+            Variant("gemm_cache_store_wt", use_tma=False, use_grouped_order=False, store_cache_modifier=".wt"),
+            Variant(
+                "gemm_cache_load_cg_store_wt",
+                use_tma=False,
+                use_grouped_order=False,
+                load_cache_modifier=".cg",
+                store_cache_modifier=".wt",
+            ),
+        ]
+    elif compare == "eviction":
+        all_variants = [
+            Variant("gemm_eviction_none", use_tma=False, use_grouped_order=False),
+            Variant("gemm_eviction_load_last", use_tma=False, use_grouped_order=False, load_eviction_policy="evict_last"),
+            Variant("gemm_eviction_store_first", use_tma=False, use_grouped_order=False, store_eviction_policy="evict_first"),
+            Variant(
+                "gemm_eviction_load_last_store_first",
+                use_tma=False,
+                use_grouped_order=False,
+                load_eviction_policy="evict_last",
+                store_eviction_policy="evict_first",
+            ),
+        ]
     if not tma_available:
         all_variants = [v for v in all_variants if not v.use_tma]
     return all_variants
@@ -250,14 +338,15 @@ def select_variants(compare: str, tma_available: bool) -> list[Variant]:
 
 def print_results(rows: list[dict[str, object]], compare: str):
     print(
-        "variant, use_tma, use_l2opt, latency_ms, tflops, max_abs_err, mean_abs_err, "
-        "speedup_vs_wo_tma, speedup_vs_wo_l2opt"
+        "variant, use_tma, use_l2opt, load_cache, store_cache, load_eviction, store_eviction, "
+        "latency_ms, tflops, max_abs_err, mean_abs_err, speedup_vs_baseline, speedup_vs_wo_tma, speedup_vs_wo_l2opt"
     )
     for row in rows:
         print(
             f"{row['variant']}, {row['use_tma']}, {row['use_l2opt']}, "
+            f"{row['load_cache']}, {row['store_cache']}, {row['load_eviction']}, {row['store_eviction']}, "
             f"{row['latency_ms']:.6f}, {row['tflops']:.3f}, {row['max_abs_err']:.6f}, "
-            f"{row['mean_abs_err']:.6f}, {row['speedup_vs_wo_tma']}, {row['speedup_vs_wo_l2opt']}"
+            f"{row['mean_abs_err']:.6f}, {row['speedup_vs_baseline']}, {row['speedup_vs_wo_tma']}, {row['speedup_vs_wo_l2opt']}"
         )
     if compare == "all":
         print("\nsummary:")
@@ -283,10 +372,15 @@ def maybe_write_csv(rows: list[dict[str, object]], csv_path: str | None):
                 "variant",
                 "use_tma",
                 "use_l2opt",
+                "load_cache",
+                "store_cache",
+                "load_eviction",
+                "store_eviction",
                 "latency_ms",
                 "tflops",
                 "max_abs_err",
                 "mean_abs_err",
+                "speedup_vs_baseline",
                 "speedup_vs_wo_tma",
                 "speedup_vs_wo_l2opt",
             ],
@@ -310,7 +404,7 @@ def parse_args():
     parser.add_argument("--warmup", type=int, default=25)
     parser.add_argument("--rep", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--compare", choices=["all", "tma", "l2"], default="all")
+    parser.add_argument("--compare", choices=["all", "tma", "l2", "cache", "eviction"], default="all")
     parser.add_argument("--csv", type=str, default=None)
     return parser.parse_args()
 
@@ -336,6 +430,7 @@ def main():
         raise RuntimeError("No benchmark variants selected")
 
     rows: list[dict[str, object]] = []
+    baseline_ms = None
     baseline_no_tma_ms = None
     baseline_no_l2_ms = None
 
@@ -346,19 +441,28 @@ def main():
             "variant": variant.name,
             "use_tma": variant.use_tma,
             "use_l2opt": variant.use_grouped_order,
+            "load_cache": variant.load_cache_modifier or '""',
+            "store_cache": variant.store_cache_modifier or '""',
+            "load_eviction": variant.load_eviction_policy or '""',
+            "store_eviction": variant.store_eviction_policy or '""',
             "latency_ms": latency_ms,
             "tflops": tflops,
             "max_abs_err": max_abs_err,
             "mean_abs_err": mean_abs_err,
+            "speedup_vs_baseline": "",
             "speedup_vs_wo_tma": "",
             "speedup_vs_wo_l2opt": "",
         }
         rows.append(row)
+        if baseline_ms is None:
+            baseline_ms = latency_ms
         if variant.name == "gemm_wo_tma_wo_l2opt":
             baseline_no_tma_ms = latency_ms
             baseline_no_l2_ms = latency_ms
 
     for row in rows:
+        if baseline_ms is not None:
+            row["speedup_vs_baseline"] = f"{baseline_ms / row['latency_ms']:.4f}x"
         if row["use_l2opt"] is False and baseline_no_tma_ms is not None and row["use_tma"]:
             row["speedup_vs_wo_tma"] = f"{baseline_no_tma_ms / row['latency_ms']:.4f}x"
         if row["use_tma"] is False and baseline_no_l2_ms is not None and row["use_l2opt"]:
