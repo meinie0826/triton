@@ -42,5 +42,6 @@ Results are written to `python/test/microbenchmark/gemm_ablation/results/` by de
 ## Notes
 
 - TMA variants require CUDA plus tensor descriptor support.
+- The TMA and non-TMA comparison uses the same non-transposed `B` layout `(K, N)` and the same `tl.dot(a, b)` formulation.
 - Cache hint and eviction-policy ablations are currently wired to the pointer-based GEMM path.
 - TMA stays in the benchmark for the main `tma` comparison, but Triton's current Python descriptor API does not expose cache hint knobs directly.

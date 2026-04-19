@@ -168,8 +168,8 @@ def matmul_kernel_tma(
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         offs_k = k * BLOCK_SIZE_K
         a = a_desc.load([offs_am, offs_k])
-        b = b_desc.load([offs_bn, offs_k])
-        acc = tl.dot(a, b.T, acc)
+        b = b_desc.load([offs_k, offs_bn])
+        acc = tl.dot(a, b, acc)
 
     c = acc.to(tl.float16) if OUTPUT_FP16 else acc.to(tl.bfloat16)
     c_desc.store([offs_am, offs_bn], c)
@@ -208,15 +208,15 @@ def launch_no_tma(a, b, *, variant, args):
     return c
 
 
-def launch_tma(a, b_t, *, variant, args):
+def launch_tma(a, b, *, variant, args):
     m, k = a.shape
-    n, _ = b_t.shape
+    _, n = b.shape
     c = torch.empty((m, n), device=a.device, dtype=a.dtype)
     a_desc = TensorDescriptor.from_tensor(a, [1, 1])
-    b_desc = TensorDescriptor.from_tensor(b_t, [1, 1])
+    b_desc = TensorDescriptor.from_tensor(b, [1, 1])
     c_desc = TensorDescriptor.from_tensor(c, [1, 1])
     a_desc.block_shape = [args.block_m, args.block_k]
-    b_desc.block_shape = [args.block_n, args.block_k]
+    b_desc.block_shape = [args.block_k, args.block_n]
     c_desc.block_shape = [args.block_m, args.block_n]
     grid = (triton.cdiv(m, args.block_m) * triton.cdiv(n, args.block_n),)
     matmul_kernel_tma[grid](
@@ -285,8 +285,8 @@ def select_variants(compare: str, tma_available: bool):
     return variants
 
 
-def run_variant(variant, a, b, b_t, ref, m, n, k, args):
-    fn = (lambda: launch_tma(a, b_t, variant=variant, args=args)) if variant.use_tma else (
+def run_variant(variant, a, b, ref, m, n, k, args):
+    fn = (lambda: launch_tma(a, b, variant=variant, args=args)) if variant.use_tma else (
         lambda: launch_no_tma(a, b, variant=variant, args=args)
     )
     out = fn()
@@ -392,9 +392,8 @@ def main():
         torch.manual_seed(args.seed + idx)
         a = torch.randn((m, k), device="cuda", dtype=dtype)
         b = torch.randn((k, n), device="cuda", dtype=dtype)
-        b_t = b.T.contiguous() if supports_tma() else None
         ref = torch.matmul(a, b)
-        shape_rows = [run_variant(v, a, b, b_t, ref, m, n, k, args) for v in variants]
+        shape_rows = [run_variant(v, a, b, ref, m, n, k, args) for v in variants]
         baseline = shape_rows[0]["latency_ms"]
         base_no_tma = next((r["latency_ms"] for r in shape_rows if r["variant"] == "gemm_wo_tma_wo_l2opt"), None)
         base_no_l2 = base_no_tma
