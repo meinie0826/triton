@@ -1,0 +1,5 @@
+variant,use_tma,use_l2opt,load_cache,store_cache,load_eviction,store_eviction,latency_ms,tflops,max_abs_err,mean_abs_err,speedup_vs_baseline,speedup_vs_wo_tma,speedup_vs_wo_l2opt
+gemm_wo_tma_wo_l2opt,False,False,"""""","""""","""""","""""",0.20298050532878284,677.1042039203703,0.0,0.0,1.0000x,,
+gemm_wo_tma_w_l2opt,False,True,"""""","""""","""""","""""",0.20414338969504056,673.2471410282403,0.0,0.0,0.9943x,,0.9943x
+gemm_w_tma_wo_l2opt,True,False,"""""","""""","""""","""""",0.18946965151949774,725.3876933312276,0.0,0.0,1.0713x,1.0713x,
+gemm_w_tma_w_l2opt,True,True,"""""","""""","""""","""""",0.19507381631080636,704.548442590685,0.0,0.0,1.0405x,,

@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "device": "NVIDIA B200",
+    "supports_tma": true,
+    "args": {
+      "M": 4096,
+      "N": 4096,
+      "K": 4096,
+      "block_m": 128,
+      "block_n": 128,
+      "block_k": 64,
+      "group_m": 8,
+      "num_warps": 4,
+      "num_stages": 3,
+      "dtype": "fp16",
+      "warmup": 25,
+      "rep": 100,
+      "seed": 0,
+      "compare": "all",
+      "csv": null,
+      "json": null
+    }
+  },
+  "rows": [
+    {
+      "variant": "gemm_wo_tma_wo_l2opt",
+      "use_tma": false,
+      "use_l2opt": false,
+      "load_cache": "\"\"",
+      "store_cache": "\"\"",
+      "load_eviction": "\"\"",
+      "store_eviction": "\"\"",
+      "latency_ms": 0.20298050532878284,
+      "tflops": 677.1042039203703,
+      "max_abs_err": 0.0,
+      "mean_abs_err": 0.0,
+      "speedup_vs_baseline": "1.0000x",
+      "speedup_vs_wo_tma": "",
+      "speedup_vs_wo_l2opt": ""
+    },
+    {
+      "variant": "gemm_wo_tma_w_l2opt",
+      "use_tma": false,
+      "use_l2opt": true,
+      "load_cache": "\"\"",
+      "store_cache": "\"\"",
+      "load_eviction": "\"\"",
+      "store_eviction": "\"\"",
+      "latency_ms": 0.20414338969504056,
+      "tflops": 673.2471410282403,
+      "max_abs_err": 0.0,
+      "mean_abs_err": 0.0,
+      "speedup_vs_baseline": "0.9943x",
+      "speedup_vs_wo_tma": "",
+      "speedup_vs_wo_l2opt": "0.9943x"
+    },
+    {
+      "variant": "gemm_w_tma_wo_l2opt",
+      "use_tma": true,
+      "use_l2opt": false,
+      "load_cache": "\"\"",
+      "store_cache": "\"\"",
+      "load_eviction": "\"\"",
+      "store_eviction": "\"\"",
+      "latency_ms": 0.18946965151949774,
+      "tflops": 725.3876933312276,
+      "max_abs_err": 0.0,
+      "mean_abs_err": 0.0,
+      "speedup_vs_baseline": "1.0713x",
+      "speedup_vs_wo_tma": "1.0713x",
+      "speedup_vs_wo_l2opt": ""
+    },
+    {
+      "variant": "gemm_w_tma_w_l2opt",
+      "use_tma": true,
+      "use_l2opt": true,
+      "load_cache": "\"\"",
+      "store_cache": "\"\"",
+      "load_eviction": "\"\"",
+      "store_eviction": "\"\"",
+      "latency_ms": 0.19507381631080636,
+      "tflops": 704.548442590685,
+      "max_abs_err": 0.0,
+      "mean_abs_err": 0.0,
+      "speedup_vs_baseline": "1.0405x",
+      "speedup_vs_wo_tma": "",
+      "speedup_vs_wo_l2opt": ""
+    }
+  ]
+}
