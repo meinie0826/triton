@@ -17,9 +17,9 @@ import torch
 
 import triton
 import triton.language as tl
+from triton.backends.driver import decompose_descriptor
 from triton.runtime.jit import compute_cache_key
 from triton.tools.tensor_descriptor import TensorDescriptor
-from third_party.nvidia.backend.driver import make_tensordesc_arg
 
 
 @triton.jit
@@ -134,6 +134,66 @@ def _is_tensordesc_signature(sig):
 
 def _flatten_runtime_signature(signature_dict):
     return [signature_dict[idx] for idx in sorted(signature_dict)]
+
+
+TMA_DTYPE_DEVICE_TO_HOST = dict((i, i) for i in range(16))
+TMA_DTYPE_DEVICE_TO_HOST[8] = 10
+TMA_DTYPE_DEVICE_TO_HOST[9] = 8
+TMA_DTYPE_DEVICE_TO_HOST[10] = 9
+TMA_TF32 = 11
+
+
+def make_tensordesc_arg(arg, metadata, _):
+    if metadata is None:
+        return decompose_descriptor(arg)
+
+    swizzle = metadata["swizzle"]
+    elem_size = metadata["elem_size"]
+    elem_type = metadata["elem_type"]
+    block_size = metadata["block_size"]
+    fp4_padded = metadata["fp4_padded"]
+    is_im2col = metadata.get("is_im2col", False)
+
+    shape = arg.shape
+    strides = arg.strides
+    assert strides[-1] == 1
+    padding = 1 if arg.padding == "nan" else 0
+
+    expanded_shape = list(shape)
+    if fp4_padded:
+        expanded_shape[-1] *= 2
+
+    if arg.round_f32_to_tf32:
+        elem_type = TMA_TF32
+
+    active_utils = triton.runtime.driver.active.utils
+    if is_im2col:
+        element_strides = arg.element_strides if arg.element_strides is not None else [1] * len(shape)
+        cu_tensor_map = active_utils.fill_tma_descriptor_im2col(
+            arg.base.data_ptr(),
+            swizzle,
+            elem_size,
+            TMA_DTYPE_DEVICE_TO_HOST[elem_type],
+            block_size,
+            expanded_shape,
+            strides,
+            padding,
+            arg.pixel_box_lower_corner,
+            arg.pixel_box_upper_corner,
+            element_strides,
+        )
+    else:
+        cu_tensor_map = active_utils.fill_tma_descriptor_tiled(
+            arg.base.data_ptr(),
+            swizzle,
+            elem_size,
+            TMA_DTYPE_DEVICE_TO_HOST[elem_type],
+            block_size,
+            expanded_shape,
+            strides,
+            padding,
+        )
+    return [cu_tensor_map, *shape, *strides]
 
 
 def transform_kernel_args_for_launch(signature, kernel_args, tensordesc_meta):
