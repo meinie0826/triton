@@ -31,6 +31,12 @@ Run a larger built-in shape sweep:
 PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --compare tma --shape-set large
 ```
 
+Run a smaller, more IO-bound-oriented sweep:
+
+```bash
+PYTHONPATH=python python3 python/test/microbenchmark/gemm_ablation/run.py --compare tma --shape-set small
+```
+
 Run custom shapes:
 
 ```bash
