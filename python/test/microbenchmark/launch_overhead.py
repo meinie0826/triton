@@ -133,7 +133,7 @@ def _is_tensordesc_signature(sig):
 
 
 def _flatten_runtime_signature(signature_dict):
-    return [signature_dict[idx] for idx in sorted(signature_dict)]
+    return list(signature_dict.values())
 
 
 TMA_DTYPE_DEVICE_TO_HOST = dict((i, i) for i in range(16))
@@ -336,7 +336,7 @@ def benchmark_sections(use_tensor_desc: bool, *, n_repeat: int, n_samples: int, 
         ("host_setup_no_launch", lambda: _host_setup_no_launch(args, grid, device, stream, kernel_cache, kernel_key_cache,
                                                                binder, runtime_kwargs)),
         ("tensordesc_transform_only", lambda: transform_kernel_args_for_launch(
-            launch_state["signature"], launch_state["bound_arg_values"], getattr(kernel.metadata, "tensordesc_meta", None))),
+            launch_state["signature"], launch_state["raw_arg_values"], getattr(kernel.metadata, "tensordesc_meta", None))),
         ("cuda_launcher_no_tensordesc_transform", lambda: launch_via_raw_driver(
             launcher_obj,
             raw_launch,
