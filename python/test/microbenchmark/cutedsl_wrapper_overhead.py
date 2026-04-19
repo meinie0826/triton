@@ -108,15 +108,13 @@ def build_benchmarks(numel):
         mma_inst_shape_mnk = (128, 256, 16)
         mma_tiler_mnk = (128, 256, 64)
         ab_stages = 4
-        mlir_ctx = ir.Context()
-
         a_torch = torch.zeros((mma_tiler_mnk[0], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
         b_torch = torch.zeros((mma_tiler_mnk[1], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
         a_cute = from_dlpack(a_torch, assumed_align=32, enable_tvm_ffi=True)
         b_cute = from_dlpack(b_torch, assumed_align=32, enable_tvm_ffi=True)
 
         def prepare_tma_tensors(a_tensor, b_tensor):
-            with mlir_ctx, ir.Location.unknown():
+            with ir.Context(), ir.Location.unknown():
                 mma_op = tcgen05.MmaF16BF16Op(
                     cutlass.Float16,
                     cutlass.Float32,
@@ -156,7 +154,17 @@ def build_benchmarks(numel):
                     mma_tiler_mnk,
                     tiled_mma,
                 )
-                return tiled_mma, a_tma_atom, a_tma_tensor, b_tma_atom, b_tma_tensor
+                # Keep the benchmark focused on host-side TMA preparation cost
+                # without leaking MLIR objects outside the context lifetime.
+                return (
+                    cute.rank(a_tma_tensor.layout),
+                    cute.rank(b_tma_tensor.layout),
+                    cute.size(a_tma_tensor),
+                    cute.size(b_tma_tensor),
+                    cute.rank(tiled_mma),
+                    type(a_tma_atom).__name__,
+                    type(b_tma_atom).__name__,
+                )
 
         sections["tma_prepare_only_prebuilt"] = lambda: prepare_tma_tensors(a_cute, b_cute)
         sections["tma_prepare_from_dlpack_each_time"] = lambda: prepare_tma_tensors(
