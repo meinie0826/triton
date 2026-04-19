@@ -99,6 +99,70 @@ def build_benchmarks(numel):
             make_ptr(cutlass.Float32, x.data_ptr(), cute.AddressSpace.gmem, assumed_align=16))),
         ("raw_ptr_end_to_end_prebuilt", lambda: compiled_ptr(cute_ptr)),
     ])
+
+    try:
+        import cutlass.utils.blackwell_helpers as sm100_utils
+        from cutlass.cute.nvgpu import tcgen05
+
+        mma_inst_shape_mnk = (128, 256, 16)
+        mma_tiler_mnk = (128, 256, 64)
+        ab_stages = 4
+
+        a_torch = torch.zeros((mma_tiler_mnk[0], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
+        b_torch = torch.zeros((mma_tiler_mnk[1], mma_tiler_mnk[2]), device="cuda", dtype=torch.float16)
+        a_cute = from_dlpack(a_torch, assumed_align=32, enable_tvm_ffi=True)
+        b_cute = from_dlpack(b_torch, assumed_align=32, enable_tvm_ffi=True)
+
+        def prepare_tma_tensors(a_tensor, b_tensor):
+            mma_op = tcgen05.MmaF16BF16Op(
+                cutlass.Float16,
+                cutlass.Float32,
+                mma_inst_shape_mnk,
+                tcgen05.CtaGroup.ONE,
+                tcgen05.OperandSource.SMEM,
+                tcgen05.OperandMajorMode.K,
+                tcgen05.OperandMajorMode.K,
+            )
+            tiled_mma = cute.make_tiled_mma(mma_op)
+            a_smem_layout = sm100_utils.make_smem_layout_a(
+                tiled_mma,
+                mma_tiler_mnk,
+                a_tensor.element_type,
+                ab_stages,
+            )
+            b_smem_layout = sm100_utils.make_smem_layout_b(
+                tiled_mma,
+                mma_tiler_mnk,
+                b_tensor.element_type,
+                ab_stages,
+            )
+            a_smem_layout_one_stage = cute.select(a_smem_layout, mode=[0, 1, 2])
+            b_smem_layout_one_stage = cute.select(b_smem_layout, mode=[0, 1, 2])
+            tma_load_op = cute.nvgpu.cpasync.CopyBulkTensorTileG2SOp(tcgen05.CtaGroup.ONE)
+            a_tma_atom, a_tma_tensor = cute.nvgpu.make_tiled_tma_atom_A(
+                tma_load_op,
+                a_tensor,
+                a_smem_layout_one_stage,
+                mma_tiler_mnk,
+                tiled_mma,
+            )
+            b_tma_atom, b_tma_tensor = cute.nvgpu.make_tiled_tma_atom_B(
+                tma_load_op,
+                b_tensor,
+                b_smem_layout_one_stage,
+                mma_tiler_mnk,
+                tiled_mma,
+            )
+            return tiled_mma, a_tma_atom, a_tma_tensor, b_tma_atom, b_tma_tensor
+
+        sections["tma_prepare_only_prebuilt"] = lambda: prepare_tma_tensors(a_cute, b_cute)
+        sections["tma_prepare_from_dlpack_each_time"] = lambda: prepare_tma_tensors(
+            from_dlpack(a_torch, assumed_align=32, enable_tvm_ffi=True),
+            from_dlpack(b_torch, assumed_align=32, enable_tvm_ffi=True),
+        )
+    except Exception as exc:
+        print(f"Skipping CuTeDSL TMA prepare benchmarks: {exc}")
+
     return sections
 
 
@@ -119,6 +183,13 @@ def print_summary(results):
     print(f"{'dlpack_wrapper_delta':>32}: median={total - baselines['tensor_end_to_end_prebuilt']:8.3f} us")
     print(f"{'raw_ptr_wrapper_delta':>32}: median={baselines['raw_ptr_end_to_end_build_each_time'] - raw_ptr:8.3f} us")
     print(f"{'torch_tensor_vs_raw_ptr':>32}: median={total - raw_ptr:8.3f} us")
+    if "tma_prepare_only_prebuilt" in baselines:
+        print(f"{'tma_prepare_only_prebuilt':>32}: median={baselines['tma_prepare_only_prebuilt']:8.3f} us")
+    if "tma_prepare_from_dlpack_each_time" in baselines:
+        print(
+            f"{'tma_prepare_from_dlpack_delta':>32}: "
+            f"median={baselines['tma_prepare_from_dlpack_each_time'] - baselines['tma_prepare_only_prebuilt']:8.3f} us"
+        )
 
 
 def dump_results(path, results, args, cutlass_source):
@@ -143,6 +214,12 @@ def dump_results(path, results, args, cutlass_source):
         summary = summarize_result(values)
         summary["share_of_torch_tensor_pct"] = 100.0 * summary["median_us"] / total
         payload["sections"][name] = summary
+    if "tma_prepare_only_prebuilt" in baselines:
+        payload["derived"]["tma_prepare_only_prebuilt_us"] = baselines["tma_prepare_only_prebuilt"]
+    if "tma_prepare_from_dlpack_each_time" in baselines:
+        payload["derived"]["tma_prepare_from_dlpack_delta_us"] = (
+            baselines["tma_prepare_from_dlpack_each_time"] - baselines["tma_prepare_only_prebuilt"]
+        )
 
     with open(path, "w") as f:
         json.dump(payload, f, indent=2, sort_keys=True)
