@@ -1,5 +1,6 @@
 import argparse
 from collections import OrderedDict
+import importlib
 import json
 from pathlib import Path
 import sys
@@ -7,9 +8,6 @@ import time
 
 import numpy as np
 import torch
-
-
-DEFAULT_CUTLASS_ROOT = "/Users/meiziyuan/Roofline-Analysis/cutlass"
 
 
 def _median_p10_p90(values):
@@ -47,11 +45,21 @@ def do_bench_walltime(fn, *, n_warmup=1000, n_repeat=10000, n_samples=25):
     return np.asarray(mses)
 
 
-def setup_cutlass_python(cutlass_root):
+def setup_cutlass_python(cutlass_root=None):
+    if importlib.util.find_spec("cutlass") is not None:
+        return "installed_package"
+    if cutlass_root is None:
+        raise ModuleNotFoundError(
+            "CuTeDSL Python package 'cutlass' is not importable. "
+            "Install nvidia-cutlass-dsl or pass --cutlass-root to a source checkout."
+        )
     cute_python_root = Path(cutlass_root) / "python" / "CuTeDSL"
     if not cute_python_root.exists():
         raise FileNotFoundError(f"CuTeDSL python root not found: {cute_python_root}")
     sys.path.insert(0, str(cute_python_root))
+    if importlib.util.find_spec("cutlass") is None:
+        raise ModuleNotFoundError(f"Unable to import 'cutlass' from source root: {cute_python_root}")
+    return str(cute_python_root)
 
 
 def build_benchmarks(numel):
@@ -113,11 +121,12 @@ def print_summary(results):
     print(f"{'torch_tensor_vs_raw_ptr':>32}: median={total - raw_ptr:8.3f} us")
 
 
-def dump_results(path, results, args):
+def dump_results(path, results, args, cutlass_source):
     baselines = {name: summarize_result(values)["median_us"] for name, values in results.items()}
     payload = {
         "framework": "cutedsl",
         "cutlass_root": args.cutlass_root,
+        "cutlass_source": cutlass_source,
         "numel": args.numel,
         "n_repeat": args.n_repeat,
         "n_samples": args.n_samples,
@@ -143,7 +152,8 @@ def dump_results(path, results, args):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Benchmark CuTeDSL Python wrapper overhead.")
-    parser.add_argument("--cutlass-root", type=str, default=DEFAULT_CUTLASS_ROOT)
+    parser.add_argument("--cutlass-root", type=str, default=None,
+                        help="Optional CUTLASS source root. Only needed if the installed 'cutlass' package is unavailable.")
     parser.add_argument("--numel", type=int, default=1024)
     parser.add_argument("--n-repeat", type=int, default=10000)
     parser.add_argument("--n-samples", type=int, default=25)
@@ -154,7 +164,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    setup_cutlass_python(args.cutlass_root)
+    cutlass_source = setup_cutlass_python(args.cutlass_root)
     sections = build_benchmarks(args.numel)
     results = OrderedDict()
     for name, fn in sections.items():
@@ -169,4 +179,4 @@ if __name__ == "__main__":
 
     print_summary(results)
     if args.output:
-        dump_results(args.output, results, args)
+        dump_results(args.output, results, args, cutlass_source)
