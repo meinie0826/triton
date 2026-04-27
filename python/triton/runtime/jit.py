@@ -32,8 +32,12 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+_TVMFFI_HOT_PATH_ENABLED = os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1"
+_TVMFFI_HOT_PATH_TRACE = os.environ.get("TRITON_TVM_FFI_HOT_PATH_TRACE", "0") == "1"
+
+
 def _tvmffi_hot_path_enabled():
-    return os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1"
+    return _TVMFFI_HOT_PATH_ENABLED
 
 # -----------------------------------------------------------------------------
 # Dependencies Finder
@@ -735,22 +739,51 @@ class JITFunction(JITCallable, KernelInterface[T]):
                     f"Global variable {name} has changed since we compiled this kernel, from {val} to {newVal}")
 
     def _can_use_tvmffi_hot_path(self, args, kwargs, grid, debug, instrumentation_mode, device):
-        if not _tvmffi_hot_path_enabled() or self._tvmffi_hot_cache is None:
-            return False
-        if kwargs or self.pre_run_hooks or callable(grid):
-            return False
-        if knobs.runtime.add_stages_inspection_hook is not None:
-            return False
-        if knobs.runtime.launch_enter_hook is not None or knobs.runtime.launch_exit_hook is not None:
+        miss_reason = None
+        if not _tvmffi_hot_path_enabled():
+            miss_reason = "disabled"
+        elif self._tvmffi_hot_cache is None:
+            miss_reason = "empty_cache"
+        elif kwargs:
+            miss_reason = "kwargs"
+        elif self.pre_run_hooks:
+            miss_reason = "pre_run_hooks"
+        elif callable(grid):
+            miss_reason = "callable_grid"
+        elif knobs.runtime.add_stages_inspection_hook is not None:
+            miss_reason = "stages_inspection_hook"
+        elif knobs.runtime.launch_enter_hook is not None:
+            miss_reason = "launch_enter_hook"
+        elif knobs.runtime.launch_exit_hook is not None:
+            miss_reason = "launch_exit_hook"
+        if miss_reason is not None:
+            self._trace_tvmffi_hot_miss(miss_reason)
             return False
         cache = self._tvmffi_hot_cache
-        if cache["device"] != device or cache["debug"] != debug or cache["instrumentation_mode"] != instrumentation_mode:
+        if cache["device"] != device:
+            self._trace_tvmffi_hot_miss("device")
+            return False
+        if cache["debug"] != debug:
+            self._trace_tvmffi_hot_miss("debug")
+            return False
+        if cache["instrumentation_mode"] != instrumentation_mode:
+            self._trace_tvmffi_hot_miss("instrumentation_mode")
             return False
         if cache["grid"] != tuple(grid):
+            self._trace_tvmffi_hot_miss("grid")
             return False
         if len(args) != len(cache["arg_ids"]):
+            self._trace_tvmffi_hot_miss("arg_count")
             return False
-        return all(id(arg) == arg_id for arg, arg_id in zip(args, cache["arg_ids"]))
+        if not all(id(arg) == arg_id for arg, arg_id in zip(args, cache["arg_ids"])):
+            self._trace_tvmffi_hot_miss("arg_id")
+            return False
+        return True
+
+    def _trace_tvmffi_hot_miss(self, reason):
+        if _TVMFFI_HOT_PATH_TRACE and self._tvmffi_hot_last_miss != reason:
+            print(f"Triton TVM FFI hot path miss: {reason}")
+            self._tvmffi_hot_last_miss = reason
 
     def _run_tvmffi_hot_path(self, grid, stream):
         cache = self._tvmffi_hot_cache
@@ -874,6 +907,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
         # cache of just-in-time compiled kernels
         self.device_caches = defaultdict(self.create_binder)
         self._tvmffi_hot_cache = None
+        self._tvmffi_hot_last_miss = None
 
         # JITFunction can be instantiated as kernel
         # when called with a grid using __getitem__
