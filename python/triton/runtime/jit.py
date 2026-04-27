@@ -752,10 +752,6 @@ class JITFunction(JITCallable, KernelInterface[T]):
             miss_reason = "callable_grid"
         elif knobs.runtime.add_stages_inspection_hook is not None:
             miss_reason = "stages_inspection_hook"
-        elif knobs.runtime.launch_enter_hook is not None:
-            miss_reason = "launch_enter_hook"
-        elif knobs.runtime.launch_exit_hook is not None:
-            miss_reason = "launch_exit_hook"
         if miss_reason is not None:
             self._trace_tvmffi_hot_miss(miss_reason)
             return False
@@ -795,8 +791,9 @@ class JITFunction(JITCallable, KernelInterface[T]):
         kernel = cache["kernel"]
         bound_values = cache["bound_values"]
         self._check_used_global_vals()
+        launch_metadata = kernel.launch_metadata(cache["grid"], stream, *bound_values)
         kernel.run(cache["grid_0"], cache["grid_1"], cache["grid_2"], stream, kernel.function, kernel.packed_metadata,
-                   None, None, None, *bound_values)
+                   launch_metadata, knobs.runtime.launch_enter_hook, knobs.runtime.launch_exit_hook, *bound_values)
         return kernel
 
     def _update_tvmffi_hot_cache(self, args, kwargs, grid, device, debug, instrumentation_mode, kernel, bound_args):
@@ -811,10 +808,6 @@ class JITFunction(JITCallable, KernelInterface[T]):
             skip_reason = "callable_grid"
         elif knobs.runtime.add_stages_inspection_hook is not None:
             skip_reason = "stages_inspection_hook"
-        elif knobs.runtime.launch_enter_hook is not None:
-            skip_reason = "launch_enter_hook"
-        elif knobs.runtime.launch_exit_hook is not None:
-            skip_reason = "launch_exit_hook"
         if skip_reason is not None:
             self._trace_tvmffi_hot_update_skip(skip_reason)
             self._tvmffi_hot_cache = None
