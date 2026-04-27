@@ -315,9 +315,7 @@ def _make_tvmffi_arg_converters(arg_plan):
     for entry in arg_plan:
         if entry[0] == "arg":
             sig = entry[2]
-            if sig[0] == "*":
-                converters.append((entry[1], True))
-            elif sig.startswith("u"):
+            if sig.startswith("u"):
                 converters.append((entry[1], False))
     return tuple(converters)
 
@@ -1110,6 +1108,8 @@ class CudaLauncher(object):
         self._tvmffi_host_stub_mod = None
         self._tvmffi_arg_plan = None
         self._tvmffi_arg_converters = ()
+        self._tvmffi_function = None
+        self._tvmffi_function_arg = None
         try:
             arg_plan = _make_tvmffi_host_arg_plan(tuple(signature.values()), tensordesc_meta)
         except ValueError:
@@ -1170,7 +1170,10 @@ class CudaLauncher(object):
                 return None if obj is None else ctypes.c_void_p(obj.data_ptr())
 
             kernel_args = _prepare_tvmffi_kernel_args(kernel_args, self._tvmffi_arg_converters)
-            self._tvmffi_host_launch(ctypes.c_void_p(function), ctypes.c_void_p(stream), gridX, gridY, gridZ,
+            if function != self._tvmffi_function:
+                self._tvmffi_function = function
+                self._tvmffi_function_arg = ctypes.c_void_p(function)
+            self._tvmffi_host_launch(self._tvmffi_function_arg, ctypes.c_void_p(stream), gridX, gridY, gridZ,
                                      ptr_arg(global_scratch), ptr_arg(profile_scratch), *kernel_args)
             if launch_exit_hook is not None:
                 launch_exit_hook(launch_metadata)
