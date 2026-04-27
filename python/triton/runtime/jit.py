@@ -741,7 +741,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
 
     def _can_use_tvmffi_hot_path(self, args, kwargs, grid, debug, instrumentation_mode, device):
         miss_reason = None
-        if not _tvmffi_hot_path_enabled():
+        if not _TVMFFI_HOT_PATH_ENABLED:
             miss_reason = "disabled"
         elif self._tvmffi_hot_cache is None:
             miss_reason = "empty_cache"
@@ -772,11 +772,9 @@ class JITFunction(JITCallable, KernelInterface[T]):
         if len(args) != len(cache["arg_ids"]):
             self._trace_tvmffi_hot_miss("arg_count")
             return False
-        arg_ids = cache["arg_ids"]
-        for i, arg in enumerate(args):
-            if id(arg) != arg_ids[i]:
-                self._trace_tvmffi_hot_miss("arg_id")
-                return False
+        if tuple(map(id, args)) != cache["arg_ids"]:
+            self._trace_tvmffi_hot_miss("arg_id")
+            return False
         return True
 
     def _trace_tvmffi_hot_miss(self, reason):
@@ -801,7 +799,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
 
     def _update_tvmffi_hot_cache(self, args, kwargs, grid, device, debug, instrumentation_mode, kernel, bound_args):
         skip_reason = None
-        if not _tvmffi_hot_path_enabled():
+        if not _TVMFFI_HOT_PATH_ENABLED:
             skip_reason = "disabled"
         elif kwargs:
             skip_reason = "kwargs"
