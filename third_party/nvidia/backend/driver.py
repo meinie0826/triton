@@ -781,6 +781,10 @@ static bool getInt64(const TVMFFIAny *arg, int64_t *out) {{
 }}
 
 static bool getUInt64(const TVMFFIAny *arg, uint64_t *out) {{
+  if (arg->type_index == kTVMFFIOpaquePtr) {{
+    *out = (uint64_t)arg->v_ptr;
+    return true;
+  }}
   int64_t val;
   if (!getInt64(arg, &val))
     return false;
@@ -1117,10 +1121,10 @@ class CudaLauncher(object):
                 launch_enter_hook(launch_metadata)
 
             def ptr_arg(obj):
-                return None if obj is None else obj.data_ptr()
+                return None if obj is None else ctypes.c_void_p(obj.data_ptr())
 
-            self._tvmffi_host_launch(function, stream, gridX, gridY, gridZ, ptr_arg(global_scratch),
-                                     ptr_arg(profile_scratch), *kernel_args)
+            self._tvmffi_host_launch(ctypes.c_void_p(function), ctypes.c_void_p(stream), gridX, gridY, gridZ,
+                                     ptr_arg(global_scratch), ptr_arg(profile_scratch), *kernel_args)
             if launch_exit_hook is not None:
                 launch_exit_hook(launch_metadata)
             return
