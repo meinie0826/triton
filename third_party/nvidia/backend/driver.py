@@ -7,7 +7,6 @@ import triton
 import ctypes
 import sys
 from triton import knobs
-from triton._utils import get_iterable_path
 from triton.runtime.build import compile_module_from_file, compile_module_from_src
 from triton.runtime import _allocation
 from triton.backends.compiler import GPUTarget
@@ -294,6 +293,13 @@ def _supports_tvmffi_host_stub(signature):
     return True
 
 
+def _get_path_value(args, path):
+    cur = args[path[0]]
+    for step in path[1:]:
+        cur = cur[step]
+    return cur
+
+
 def _set_path_value(args, path, value):
     if len(path) == 1:
         args[path[0]] = value
@@ -304,18 +310,29 @@ def _set_path_value(args, path, value):
     args[path[0]] = tuple(parent_list) if isinstance(parent, tuple) else parent_list
 
 
-def _prepare_tvmffi_kernel_args(args, arg_plan):
-    prepared = list(args)
+def _make_tvmffi_arg_converters(arg_plan):
+    converters = []
     for entry in arg_plan:
-        if entry[0] != "arg":
-            continue
-        path = entry[1]
-        sig = entry[2]
-        arg = get_iterable_path(prepared, path)
-        if isinstance(arg, int):
-            if sig[0] == "*" or (sig.startswith("u") and arg > (1 << 63) - 1):
-                _set_path_value(prepared, path, ctypes.c_void_p(arg))
-    return tuple(prepared)
+        if entry[0] == "arg":
+            sig = entry[2]
+            if sig[0] == "*":
+                converters.append((entry[1], True))
+            elif sig.startswith("u"):
+                converters.append((entry[1], False))
+    return tuple(converters)
+
+
+def _prepare_tvmffi_kernel_args(args, converters):
+    if not converters:
+        return args
+    prepared = None
+    for path, is_ptr in converters:
+        arg = _get_path_value(prepared if prepared is not None else args, path)
+        if isinstance(arg, int) and (is_ptr or arg > (1 << 63) - 1):
+            if prepared is None:
+                prepared = list(args)
+            _set_path_value(prepared, path, ctypes.c_void_p(arg))
+    return args if prepared is None else tuple(prepared)
 
 
 def _make_tvmffi_host_stub_src(module_name, arg_plan):
@@ -1092,6 +1109,7 @@ class CudaLauncher(object):
         self._tvmffi_host_launch = None
         self._tvmffi_host_stub_mod = None
         self._tvmffi_arg_plan = None
+        self._tvmffi_arg_converters = ()
         try:
             arg_plan = _make_tvmffi_host_arg_plan(tuple(signature.values()), tensordesc_meta)
         except ValueError:
@@ -1109,6 +1127,7 @@ class CudaLauncher(object):
             # The stub still uses Python exception APIs for error reporting.
             self._tvmffi_host_launch.release_gil = False
             self._tvmffi_arg_plan = arg_plan
+            self._tvmffi_arg_converters = _make_tvmffi_arg_converters(arg_plan)
 
     def __call__(self, gridX, gridY, gridZ, stream, function, kernel_metadata, launch_metadata, launch_enter_hook,
                  launch_exit_hook, *args):
@@ -1150,7 +1169,7 @@ class CudaLauncher(object):
             def ptr_arg(obj):
                 return None if obj is None else ctypes.c_void_p(obj.data_ptr())
 
-            kernel_args = _prepare_tvmffi_kernel_args(kernel_args, self._tvmffi_arg_plan)
+            kernel_args = _prepare_tvmffi_kernel_args(kernel_args, self._tvmffi_arg_converters)
             self._tvmffi_host_launch(ctypes.c_void_p(function), ctypes.c_void_p(stream), gridX, gridY, gridZ,
                                      ptr_arg(global_scratch), ptr_arg(profile_scratch), *kernel_args)
             if launch_exit_hook is not None:
