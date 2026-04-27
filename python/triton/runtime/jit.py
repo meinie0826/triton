@@ -4,6 +4,7 @@ import copy
 import hashlib
 import inspect
 import itertools
+import os
 import threading
 import re
 import textwrap
@@ -29,6 +30,10 @@ INDENT_PATTERN = re.compile(r"^(?P<indent>[ \t]*)def\s+\w+\s*\(", re.MULTILINE)
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _tvmffi_hot_path_enabled():
+    return os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1"
 
 # -----------------------------------------------------------------------------
 # Dependencies Finder
@@ -722,13 +727,79 @@ class JITFunction(JITCallable, KernelInterface[T]):
 
         return options, signature, constexprs, attrs
 
+    def _check_used_global_vals(self):
+        not_present = object()
+        for (name, _), (val, globals_dict) in self.used_global_vals.items():
+            if (newVal := globals_dict.get(name, not_present)) != val:
+                raise RuntimeError(
+                    f"Global variable {name} has changed since we compiled this kernel, from {val} to {newVal}")
+
+    def _can_use_tvmffi_hot_path(self, args, kwargs, grid, debug, instrumentation_mode, device):
+        if not _tvmffi_hot_path_enabled() or self._tvmffi_hot_cache is None:
+            return False
+        if kwargs or self.pre_run_hooks or callable(grid):
+            return False
+        if knobs.runtime.add_stages_inspection_hook is not None:
+            return False
+        if knobs.runtime.launch_enter_hook is not None or knobs.runtime.launch_exit_hook is not None:
+            return False
+        cache = self._tvmffi_hot_cache
+        if cache["device"] != device or cache["debug"] != debug or cache["instrumentation_mode"] != instrumentation_mode:
+            return False
+        if cache["grid"] != tuple(grid):
+            return False
+        if len(args) != len(cache["arg_ids"]):
+            return False
+        return all(id(arg) == arg_id for arg, arg_id in zip(args, cache["arg_ids"]))
+
+    def _run_tvmffi_hot_path(self, grid, stream):
+        cache = self._tvmffi_hot_cache
+        kernel = cache["kernel"]
+        bound_values = cache["bound_values"]
+        self._check_used_global_vals()
+        kernel.run(cache["grid_0"], cache["grid_1"], cache["grid_2"], stream, kernel.function, kernel.packed_metadata,
+                   None, None, None, *bound_values)
+        return kernel
+
+    def _update_tvmffi_hot_cache(self, args, kwargs, grid, device, debug, instrumentation_mode, kernel, bound_args):
+        if not _tvmffi_hot_path_enabled() or kwargs or self.pre_run_hooks or callable(grid):
+            self._tvmffi_hot_cache = None
+            return
+        if knobs.runtime.add_stages_inspection_hook is not None:
+            self._tvmffi_hot_cache = None
+            return
+        if knobs.runtime.launch_enter_hook is not None or knobs.runtime.launch_exit_hook is not None:
+            self._tvmffi_hot_cache = None
+            return
+        grid_tuple = tuple(grid)
+        grid_size = len(grid_tuple)
+        self._tvmffi_hot_cache = {
+            "arg_ids": tuple(id(arg) for arg in args),
+            "bound_values": tuple(bound_args.values()),
+            "debug": debug,
+            "device": device,
+            "grid": grid_tuple,
+            "grid_0": grid_tuple[0],
+            "grid_1": grid_tuple[1] if grid_size > 1 else 1,
+            "grid_2": grid_tuple[2] if grid_size > 2 else 1,
+            "instrumentation_mode": instrumentation_mode,
+            "kernel": kernel,
+        }
+
     def run(self, *args, grid, warmup, **kwargs):
-        kwargs["debug"] = kwargs.get("debug", self.debug) or knobs.runtime.debug
-        kwargs["instrumentation_mode"] = knobs.compilation.instrumentation_mode
+        user_kwargs = kwargs.copy()
+        debug = kwargs.get("debug", self.debug) or knobs.runtime.debug
+        instrumentation_mode = knobs.compilation.instrumentation_mode
 
         # parse options
         device = driver.active.get_current_device()
         stream = driver.active.get_current_stream(device)
+
+        if not warmup and self._can_use_tvmffi_hot_path(args, user_kwargs, grid, debug, instrumentation_mode, device):
+            return self._run_tvmffi_hot_path(grid, stream)
+
+        kwargs["debug"] = debug
+        kwargs["instrumentation_mode"] = instrumentation_mode
 
         # Execute pre run hooks with args and kwargs
         for hook in self.pre_run_hooks:
@@ -757,12 +828,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
             if kernel is None:
                 return None
 
-        # Check that used global values have not changed.
-        not_present = object()
-        for (name, _), (val, globals_dict) in self.used_global_vals.items():
-            if (newVal := globals_dict.get(name, not_present)) != val:
-                raise RuntimeError(
-                    f"Global variable {name} has changed since we compiled this kernel, from {val} to {newVal}")
+        self._check_used_global_vals()
 
         if not warmup:
             # canonicalize grid
@@ -777,6 +843,8 @@ class JITFunction(JITCallable, KernelInterface[T]):
             launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())
             kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,
                        knobs.runtime.launch_enter_hook, knobs.runtime.launch_exit_hook, *bound_args.values())
+            self._update_tvmffi_hot_cache(args, user_kwargs, grid, device, debug, instrumentation_mode, kernel,
+                                          bound_args)
         return kernel
 
     def repr(self, _):
@@ -805,6 +873,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
 
         # cache of just-in-time compiled kernels
         self.device_caches = defaultdict(self.create_binder)
+        self._tvmffi_hot_cache = None
 
         # JITFunction can be instantiated as kernel
         # when called with a grid using __getitem__
