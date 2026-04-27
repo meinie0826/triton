@@ -785,6 +785,11 @@ class JITFunction(JITCallable, KernelInterface[T]):
             print(f"Triton TVM FFI hot path miss: {reason}")
             self._tvmffi_hot_last_miss = reason
 
+    def _trace_tvmffi_hot_update_skip(self, reason):
+        if _TVMFFI_HOT_PATH_TRACE and self._tvmffi_hot_last_update_skip != reason:
+            print(f"Triton TVM FFI hot path update skipped: {reason}")
+            self._tvmffi_hot_last_update_skip = reason
+
     def _run_tvmffi_hot_path(self, grid, stream):
         cache = self._tvmffi_hot_cache
         kernel = cache["kernel"]
@@ -795,13 +800,23 @@ class JITFunction(JITCallable, KernelInterface[T]):
         return kernel
 
     def _update_tvmffi_hot_cache(self, args, kwargs, grid, device, debug, instrumentation_mode, kernel, bound_args):
-        if not _tvmffi_hot_path_enabled() or kwargs or self.pre_run_hooks or callable(grid):
-            self._tvmffi_hot_cache = None
-            return
-        if knobs.runtime.add_stages_inspection_hook is not None:
-            self._tvmffi_hot_cache = None
-            return
-        if knobs.runtime.launch_enter_hook is not None or knobs.runtime.launch_exit_hook is not None:
+        skip_reason = None
+        if not _tvmffi_hot_path_enabled():
+            skip_reason = "disabled"
+        elif kwargs:
+            skip_reason = "kwargs"
+        elif self.pre_run_hooks:
+            skip_reason = "pre_run_hooks"
+        elif callable(grid):
+            skip_reason = "callable_grid"
+        elif knobs.runtime.add_stages_inspection_hook is not None:
+            skip_reason = "stages_inspection_hook"
+        elif knobs.runtime.launch_enter_hook is not None:
+            skip_reason = "launch_enter_hook"
+        elif knobs.runtime.launch_exit_hook is not None:
+            skip_reason = "launch_exit_hook"
+        if skip_reason is not None:
+            self._trace_tvmffi_hot_update_skip(skip_reason)
             self._tvmffi_hot_cache = None
             return
         grid_tuple = tuple(grid)
@@ -908,6 +923,7 @@ class JITFunction(JITCallable, KernelInterface[T]):
         self.device_caches = defaultdict(self.create_binder)
         self._tvmffi_hot_cache = None
         self._tvmffi_hot_last_miss = None
+        self._tvmffi_hot_last_update_skip = None
 
         # JITFunction can be instantiated as kernel
         # when called with a grid using __getitem__
