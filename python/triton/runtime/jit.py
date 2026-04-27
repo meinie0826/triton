@@ -32,7 +32,8 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-_TVMFFI_HOT_PATH_ENABLED = os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1"
+_TVMFFI_HOT_PATH_ENABLED = (os.environ.get("TRITON_ENABLE_JIT_HOT_PATH", "0") == "1"
+                            or os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1")
 _TVMFFI_HOT_PATH_TRACE = os.environ.get("TRITON_TVM_FFI_HOT_PATH_TRACE", "0") == "1"
 
 
@@ -771,9 +772,11 @@ class JITFunction(JITCallable, KernelInterface[T]):
         if len(args) != len(cache["arg_ids"]):
             self._trace_tvmffi_hot_miss("arg_count")
             return False
-        if not all(id(arg) == arg_id for arg, arg_id in zip(args, cache["arg_ids"])):
-            self._trace_tvmffi_hot_miss("arg_id")
-            return False
+        arg_ids = cache["arg_ids"]
+        for i, arg in enumerate(args):
+            if id(arg) != arg_ids[i]:
+                self._trace_tvmffi_hot_miss("arg_id")
+                return False
         return True
 
     def _trace_tvmffi_hot_miss(self, reason):
