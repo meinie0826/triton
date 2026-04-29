@@ -1119,7 +1119,7 @@ class CudaLauncher(object):
         except ValueError:
             arg_plan = None
         if (not self.gsan_enabled and _is_tvmffi_launcher_enabled() and arg_plan is not None
-                and _tvmffi_arg_plan_has_tma(arg_plan) and _supports_tvmffi_host_stub(arg_plan)):
+                and _supports_tvmffi_host_stub(arg_plan)):
             tvm_ffi = _import_tvm_ffi()
             self._tvmffi_host_stub_mod = _compile_tvmffi_host_stub(
                 arg_plan, metadata.num_warps, self.num_ctas, metadata.shared, self.launch_cooperative_grid,

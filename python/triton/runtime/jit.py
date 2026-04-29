@@ -32,14 +32,6 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-_TVMFFI_HOT_PATH_ENABLED = (os.environ.get("TRITON_ENABLE_JIT_HOT_PATH", "0") == "1"
-                            or os.environ.get("TRITON_ENABLE_TVM_FFI_LAUNCHER", "0") == "1")
-_TVMFFI_HOT_PATH_TRACE = os.environ.get("TRITON_TVM_FFI_HOT_PATH_TRACE", "0") == "1"
-
-
-def _tvmffi_hot_path_enabled():
-    return _TVMFFI_HOT_PATH_ENABLED
-
 # -----------------------------------------------------------------------------
 # Dependencies Finder
 # -----------------------------------------------------------------------------
@@ -739,106 +731,13 @@ class JITFunction(JITCallable, KernelInterface[T]):
                 raise RuntimeError(
                     f"Global variable {name} has changed since we compiled this kernel, from {val} to {newVal}")
 
-    def _can_use_tvmffi_hot_path(self, args, kwargs, grid, debug, instrumentation_mode, device):
-        miss_reason = None
-        if not _TVMFFI_HOT_PATH_ENABLED:
-            miss_reason = "disabled"
-        elif self._tvmffi_hot_cache is None:
-            miss_reason = "empty_cache"
-        elif kwargs:
-            miss_reason = "kwargs"
-        elif self.pre_run_hooks:
-            miss_reason = "pre_run_hooks"
-        elif callable(grid):
-            miss_reason = "callable_grid"
-        elif knobs.runtime.add_stages_inspection_hook is not None:
-            miss_reason = "stages_inspection_hook"
-        if miss_reason is not None:
-            self._trace_tvmffi_hot_miss(miss_reason)
-            return False
-        cache = self._tvmffi_hot_cache
-        if cache["device"] != device:
-            self._trace_tvmffi_hot_miss("device")
-            return False
-        if cache["debug"] != debug:
-            self._trace_tvmffi_hot_miss("debug")
-            return False
-        if cache["instrumentation_mode"] != instrumentation_mode:
-            self._trace_tvmffi_hot_miss("instrumentation_mode")
-            return False
-        if cache["grid"] != tuple(grid):
-            self._trace_tvmffi_hot_miss("grid")
-            return False
-        if len(args) != len(cache["arg_ids"]):
-            self._trace_tvmffi_hot_miss("arg_count")
-            return False
-        if tuple(map(id, args)) != cache["arg_ids"]:
-            self._trace_tvmffi_hot_miss("arg_id")
-            return False
-        return True
-
-    def _trace_tvmffi_hot_miss(self, reason):
-        if _TVMFFI_HOT_PATH_TRACE and self._tvmffi_hot_last_miss != reason:
-            print(f"Triton TVM FFI hot path miss: {reason}")
-            self._tvmffi_hot_last_miss = reason
-
-    def _trace_tvmffi_hot_update_skip(self, reason):
-        if _TVMFFI_HOT_PATH_TRACE and self._tvmffi_hot_last_update_skip != reason:
-            print(f"Triton TVM FFI hot path update skipped: {reason}")
-            self._tvmffi_hot_last_update_skip = reason
-
-    def _run_tvmffi_hot_path(self, grid, stream):
-        cache = self._tvmffi_hot_cache
-        kernel = cache["kernel"]
-        bound_values = cache["bound_values"]
-        self._check_used_global_vals()
-        launch_metadata = kernel.launch_metadata(cache["grid"], stream, *bound_values)
-        kernel.run(cache["grid_0"], cache["grid_1"], cache["grid_2"], stream, kernel.function, kernel.packed_metadata,
-                   launch_metadata, knobs.runtime.launch_enter_hook, knobs.runtime.launch_exit_hook, *bound_values)
-        return kernel
-
-    def _update_tvmffi_hot_cache(self, args, kwargs, grid, device, debug, instrumentation_mode, kernel, bound_args):
-        skip_reason = None
-        if not _TVMFFI_HOT_PATH_ENABLED:
-            skip_reason = "disabled"
-        elif kwargs:
-            skip_reason = "kwargs"
-        elif self.pre_run_hooks:
-            skip_reason = "pre_run_hooks"
-        elif callable(grid):
-            skip_reason = "callable_grid"
-        elif knobs.runtime.add_stages_inspection_hook is not None:
-            skip_reason = "stages_inspection_hook"
-        if skip_reason is not None:
-            self._trace_tvmffi_hot_update_skip(skip_reason)
-            self._tvmffi_hot_cache = None
-            return
-        grid_tuple = tuple(grid)
-        grid_size = len(grid_tuple)
-        self._tvmffi_hot_cache = {
-            "arg_ids": tuple(id(arg) for arg in args),
-            "bound_values": tuple(bound_args.values()),
-            "debug": debug,
-            "device": device,
-            "grid": grid_tuple,
-            "grid_0": grid_tuple[0],
-            "grid_1": grid_tuple[1] if grid_size > 1 else 1,
-            "grid_2": grid_tuple[2] if grid_size > 2 else 1,
-            "instrumentation_mode": instrumentation_mode,
-            "kernel": kernel,
-        }
-
     def run(self, *args, grid, warmup, **kwargs):
-        user_kwargs = kwargs.copy()
         debug = kwargs.get("debug", self.debug) or knobs.runtime.debug
         instrumentation_mode = knobs.compilation.instrumentation_mode
 
         # parse options
         device = driver.active.get_current_device()
         stream = driver.active.get_current_stream(device)
-
-        if not warmup and self._can_use_tvmffi_hot_path(args, user_kwargs, grid, debug, instrumentation_mode, device):
-            return self._run_tvmffi_hot_path(grid, stream)
 
         kwargs["debug"] = debug
         kwargs["instrumentation_mode"] = instrumentation_mode
@@ -885,8 +784,6 @@ class JITFunction(JITCallable, KernelInterface[T]):
             launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())
             kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,
                        knobs.runtime.launch_enter_hook, knobs.runtime.launch_exit_hook, *bound_args.values())
-            self._update_tvmffi_hot_cache(args, user_kwargs, grid, device, debug, instrumentation_mode, kernel,
-                                          bound_args)
         return kernel
 
     def repr(self, _):
@@ -915,9 +812,6 @@ class JITFunction(JITCallable, KernelInterface[T]):
 
         # cache of just-in-time compiled kernels
         self.device_caches = defaultdict(self.create_binder)
-        self._tvmffi_hot_cache = None
-        self._tvmffi_hot_last_miss = None
-        self._tvmffi_hot_last_update_skip = None
 
         # JITFunction can be instantiated as kernel
         # when called with a grid using __getitem__
