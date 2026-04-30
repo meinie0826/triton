@@ -8,11 +8,21 @@ This test:
 4. Benchmarks warp_specialize vs non-warp_specialize performance
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
 import torch
 import triton
 import triton.language as tl
 from triton.tools.tensor_descriptor import TensorDescriptor
 from triton.tools.mxfp import MXFP4Tensor, MXScaleTensor
+
+# Reuse data setup from the original tutorial
+from importlib import import_module
+tutorial = import_module("10-block-scaled-matmul")
+initialize_block_scaled = tutorial.initialize_block_scaled
+block_scaled_matmul_kernel = tutorial.block_scaled_matmul_kernel
 
 
 def is_cuda_blackwell():
@@ -24,9 +34,6 @@ BLOCK_M = 128
 BLOCK_N = 256
 BLOCK_K = 256
 VEC_SIZE = 16  # nvfp4
-ELEM_PER_BYTE_A = 2  # fp4
-ELEM_PER_BYTE_B = 2  # fp4
-NUM_STAGES = 4
 
 
 @triton.jit
@@ -81,57 +88,22 @@ def scaled_matmul_ws_kernel(
     c_desc.store([offs_am, offs_bn], accumulator.to(output_dtype))
 
 
-def setup_data(M, N, K):
-    """Create test data and tensor descriptors for nvfp4 block-scaled matmul."""
-    device = "cuda"
-    a_ref = MXFP4Tensor(size=(M, K), device=device).random()
-    b_ref = MXFP4Tensor(size=(N, K), device=device).random()
-    a = a_ref.to_packed_tensor(dim=1)
-    b = b_ref.to_packed_tensor(dim=1)
-    b_ref = b_ref.to(torch.float32).T
-
-    a_desc = TensorDescriptor.from_tensor(a, [BLOCK_M, BLOCK_K // ELEM_PER_BYTE_A])
-    b_desc = TensorDescriptor.from_tensor(b, [BLOCK_N, BLOCK_K // ELEM_PER_BYTE_B])
-
-    a_scale_shape = [M // 128, K // VEC_SIZE // 4, 32, 16]
-    b_scale_shape = [N // 128, K // VEC_SIZE // 4, 32, 16]
-    epsilon = 1e-8
-    a_scale = (torch.rand(a_scale_shape, device=device) + epsilon).to(torch.float8_e4m3fn)
-    b_scale = (torch.rand(b_scale_shape, device=device) + epsilon).to(torch.float8_e4m3fn)
-
-    rep_m = BLOCK_M // 128
-    rep_n = BLOCK_N // 128
-    rep_k = BLOCK_K // VEC_SIZE // 4
-
-    a_scale_block_shape = [1, rep_m, rep_k, 2, 256]
-    b_scale_block_shape = [1, rep_n, rep_k, 2, 256]
-    a_scale = a_scale.reshape(1, a_scale_shape[0], a_scale.shape[1], 2, 256)
-    b_scale = b_scale.reshape(1, b_scale_shape[0], b_scale.shape[1], 2, 256)
-    a_scale_desc = TensorDescriptor.from_tensor(a_scale, block_shape=a_scale_block_shape)
-    b_scale_desc = TensorDescriptor.from_tensor(b_scale, block_shape=b_scale_block_shape)
-
-    # Compute reference
-    a_scale_ref = a_scale.to(torch.float32).reshape(a_scale_shape[0], 32, 4, 4).permute(0, 3, 2, 1, 4).reshape(a_scale_shape[0] * 128, 16).repeat_interleave(VEC_SIZE, dim=1)[:M, :K]
-    b_scale_ref = b_scale.to(torch.float32).reshape(b_scale_shape[0], 32, 4, 4).permute(0, 3, 2, 1, 4).reshape(b_scale_shape[0] * 128, 16).repeat_interleave(VEC_SIZE, dim=1).T.contiguous()[:K, :N]
-    reference = torch.matmul(a_ref.to(torch.float32) * a_scale_ref, b_ref * b_scale_ref)
-
-    return a_desc, a_scale_desc, b_desc, b_scale_desc, rep_m, rep_n, rep_k, reference
-
-
 def compile_and_check(M, N, K, use_ws, dump_ir=False):
     """Compile kernel, check correctness, optionally dump IR."""
-    a_desc, a_scale_desc, b_desc, b_scale_desc, rep_m, rep_n, rep_k, reference = setup_data(M, N, K)
+    results = initialize_block_scaled(M, N, K, "nvfp4", compute_reference=True)
+    a_desc, a_scale_desc, b_desc, b_scale_desc, rep_m, rep_n, rep_k, configs, reference = results[:9]
 
     output = torch.empty((M, N), dtype=torch.float16, device="cuda")
     c_desc = TensorDescriptor.from_tensor(output, [BLOCK_M, BLOCK_N])
+    dtype_dst = 1  # fp16
 
     grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), 1)
     h = scaled_matmul_ws_kernel[grid](
         a_desc, a_scale_desc, b_desc, b_scale_desc, c_desc,
-        M, N, K, 1,  # output_type=1 (fp16)
-        ELEM_PER_BYTE_A, ELEM_PER_BYTE_B, VEC_SIZE,
-        BLOCK_M, BLOCK_N, BLOCK_K,
-        rep_m, rep_n, rep_k, NUM_STAGES,
+        M, N, K, dtype_dst,
+        configs["ELEM_PER_BYTE_A"], configs["ELEM_PER_BYTE_B"], configs["VEC_SIZE"],
+        configs["BLOCK_SIZE_M"], configs["BLOCK_SIZE_N"], configs["BLOCK_SIZE_K"],
+        rep_m, rep_n, rep_k, configs["num_stages"],
         USE_WARP_SPECIALIZE=use_ws,
     )
 
@@ -163,17 +135,23 @@ def compile_and_check(M, N, K, use_ws, dump_ir=False):
 
 def benchmark(M, N, K, use_ws, reps=100, warmup=20):
     """Simple timing benchmark."""
-    a_desc, a_scale_desc, b_desc, b_scale_desc, rep_m, rep_n, rep_k, _ = setup_data(M, N, K)
+    results = initialize_block_scaled(M, N, K, "nvfp4", compute_reference=False)
+    a_desc, a_scale_desc, b_desc, b_scale_desc, rep_m, rep_n, rep_k, configs, _ = results[:9]
+
     output = torch.empty((M, N), dtype=torch.float16, device="cuda")
     c_desc = TensorDescriptor.from_tensor(output, [BLOCK_M, BLOCK_N])
+    dtype_dst = 1
+
     grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), 1)
 
     # Warmup
     for _ in range(warmup):
         scaled_matmul_ws_kernel[grid](
             a_desc, a_scale_desc, b_desc, b_scale_desc, c_desc,
-            M, N, K, 1, ELEM_PER_BYTE_A, ELEM_PER_BYTE_B, VEC_SIZE,
-            BLOCK_M, BLOCK_N, BLOCK_K, rep_m, rep_n, rep_k, NUM_STAGES,
+            M, N, K, dtype_dst,
+            configs["ELEM_PER_BYTE_A"], configs["ELEM_PER_BYTE_B"], configs["VEC_SIZE"],
+            configs["BLOCK_SIZE_M"], configs["BLOCK_SIZE_N"], configs["BLOCK_SIZE_K"],
+            rep_m, rep_n, rep_k, configs["num_stages"],
             USE_WARP_SPECIALIZE=use_ws,
         )
     torch.cuda.synchronize()
@@ -185,8 +163,10 @@ def benchmark(M, N, K, use_ws, reps=100, warmup=20):
     for _ in range(reps):
         scaled_matmul_ws_kernel[grid](
             a_desc, a_scale_desc, b_desc, b_scale_desc, c_desc,
-            M, N, K, 1, ELEM_PER_BYTE_A, ELEM_PER_BYTE_B, VEC_SIZE,
-            BLOCK_M, BLOCK_N, BLOCK_K, rep_m, rep_n, rep_k, NUM_STAGES,
+            M, N, K, dtype_dst,
+            configs["ELEM_PER_BYTE_A"], configs["ELEM_PER_BYTE_B"], configs["VEC_SIZE"],
+            configs["BLOCK_SIZE_M"], configs["BLOCK_SIZE_N"], configs["BLOCK_SIZE_K"],
+            rep_m, rep_n, rep_k, configs["num_stages"],
             USE_WARP_SPECIALIZE=use_ws,
         )
     end.record()
