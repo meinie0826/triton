@@ -270,6 +270,7 @@ def block_scaled_matmul(a_desc, a_scale_desc, b_desc, b_scale_desc, dtype_dst, M
         rep_n,
         rep_k,
         configs["num_stages"],
+        warp_specialize=True,
     )
     return output, h
 
