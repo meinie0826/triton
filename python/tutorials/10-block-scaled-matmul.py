@@ -250,7 +250,7 @@ def block_scaled_matmul(a_desc, a_scale_desc, b_desc, b_scale_desc, dtype_dst, M
     c_desc = TensorDescriptor.from_tensor(output, [BLOCK_M, BLOCK_N])
 
     grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), 1)
-    block_scaled_matmul_kernel[grid](
+    h = block_scaled_matmul_kernel[grid](
         a_desc,
         a_scale_desc,
         b_desc,
@@ -271,7 +271,7 @@ def block_scaled_matmul(a_desc, a_scale_desc, b_desc, b_scale_desc, dtype_dst, M
         rep_k,
         configs["num_stages"],
     )
-    return output
+    return output, h
 
 
 def cublas_block_scaled_matmul(a, a_scale, b, b_scale, block_scale_type="mxfp8"):
@@ -442,8 +442,17 @@ def validate_block_scaled(M, N, K, block_scale_type="nvfp4"):
     a, b, a_scale_cublas, b_scale_cublas = results[9:]
 
     # Test Triton implementation
-    output = block_scaled_matmul(a_desc, a_scale_desc, b_desc, b_scale_desc, torch.float16, M, N, K, rep_m, rep_n,
-                                 rep_k, configs)
+    output, h = block_scaled_matmul(a_desc, a_scale_desc, b_desc, b_scale_desc, torch.float16, M, N, K, rep_m, rep_n,
+                                     rep_k, configs)
+
+    # Dump IR stages
+    for stage in ["ttir", "ttgir"]:
+        ir = h.asm[stage]
+        print(f"\n{'='*60}\n{stage}:\n{'='*60}")
+        # Print lines containing dot_scaled or tc_gen5_mma
+        for line in ir.split("\n"):
+            if "dot_scaled" in line or "tc_gen5_mma" in line or "warp_specialize" in line:
+                print(line)
     torch.testing.assert_close(reference, output.to(torch.float32), atol=1e-3, rtol=1e-3)
 
     # Test cuBLAS implementation if available (available for mxfp8 and nvfp4 only as of 13.1)
