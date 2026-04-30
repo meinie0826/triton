@@ -230,6 +230,7 @@ SmallVector<OutputPort> initialDataValues(Graph *graph) {
         values.push_back({node, 1});
       }
       if (isa<nvidia_gpu::TCGen5MMAOp, nvidia_gpu::TCGen5MMAScaledOp>(op)) {
+        llvm::errs() << "[PartitionScheduling] initialDataValues: found MMA op: " << op->getName() << "\n";
         node->setDataValue(0);
         values.push_back({node, 0});
       }
