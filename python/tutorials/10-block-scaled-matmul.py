@@ -211,7 +211,7 @@ def block_scaled_matmul_kernel(  #
     MIXED_PREC: tl.constexpr = ELEM_PER_BYTE_A == 1 and ELEM_PER_BYTE_B == 2
 
     accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    for k in tl.range(0, tl.cdiv(K, BLOCK_K), num_stages=NUM_STAGES):
+    for k in tl.range(0, tl.cdiv(K, BLOCK_K), num_stages=NUM_STAGES, warp_specialize=True):
         a = a_desc.load([offs_am, offs_k_a])
         b = b_desc.load([offs_bn, offs_k_b])
         scale_a = a_scale_desc.load([0, offs_scale_m, offs_scale_k, 0, 0])
