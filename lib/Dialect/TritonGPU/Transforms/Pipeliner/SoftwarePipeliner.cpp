@@ -113,12 +113,10 @@ static void expandLoops(ModuleOp moduleOp) {
     // Testing feature: allow for unresolved predicate stage ops
     // in the loop body.
     bool keepPredicateStage = forOp->hasAttr("__test_keep_predicate_stage");
-    // TODO: Enable epilogue peeling for warp specialized loops
     // Heuristic: only peel epilogue for MMAv5 loops with waits in the last
     // stage
     bool customEpiloguePeeling =
         hasMMAv5WaitsInLastStage(forOp, schedule) &&
-        !forOp->getParentOfType<triton::gpu::WarpSpecializeOp>() &&
         !keepPredicateStage; // do not peel if we are testing the stage
                              // predication
 

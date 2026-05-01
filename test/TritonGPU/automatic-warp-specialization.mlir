@@ -1,6 +1,7 @@
 // RUN: triton-opt %s -split-input-file -allow-unregistered-dialect -tritongpu-hoist-tmem-alloc -tritongpu-assign-latencies -tritongpu-schedule-loops -tritongpu-automatic-warp-specialization=num-stages=2 | FileCheck %s --check-prefix=CHECK --check-prefix=BASE --check-prefix=CLEAN
 // RUN: triton-opt %s -split-input-file -allow-unregistered-dialect -tritongpu-hoist-tmem-alloc -tritongpu-assign-latencies -tritongpu-schedule-loops -tritongpu-automatic-warp-specialization=num-stages=2 -tritongpu-pipeline | FileCheck %s --check-prefix=CHECK --check-prefix=PIPELINE --check-prefix=CLEAN
 // RUN: triton-opt %s -split-input-file -allow-unregistered-dialect -tritongpu-hoist-tmem-alloc -tritongpu-assign-latencies -tritongpu-schedule-loops -tritongpu-automatic-warp-specialization=num-stages=2 -tritongpu-pipeline -tritongpu-optimize-partition-warps | FileCheck %s --check-prefix=OPT --check-prefix=CLEAN
+// RUN: triton-opt %s -split-input-file -allow-unregistered-dialect -tritongpu-hoist-tmem-alloc -tritongpu-assign-latencies -tritongpu-schedule-loops -tritongpu-automatic-warp-specialization=num-stages=4 -tritongpu-pipeline | FileCheck %s --check-prefix=PEELING
 
 // CLEAN: module
 // CLEAN-NOT: ttg.partition
@@ -391,4 +392,49 @@ module attributes {"ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.targ
     } {tt.warp_specialize}
     tt.return
   }
+}
+
+// -----
+
+// Test that epilogue peeling works for warp-specialized MMAv5 loops.
+// With num_stages=4, the pipelined loop will have wait barriers in the last
+// stage, triggering customEpiloguePeeling. The peeled iteration produces a
+// second tc_gen5_mma outside the loop (1 in loop + 1 in epilogue).
+#acc_layout = #ttg.blocked<{sizePerThread = [1, 128], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>
+#oper_layout = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [2, 2], order = [1, 0]}>
+#shared = #ttg.nvmma_shared<{swizzlingByteWidth = 128, transposed = false, elementBitWidth = 16}>
+#smem = #ttg.shared_memory
+#acc_tmem = #ttng.tensor_memory_encoding<blockM = 128, blockN = 128, colStride = 1>
+module attributes {"ttg.num-warps" = 4 : i32, ttg.target = "cuda:100"} {
+
+// PEELING-LABEL: @matmul_ws_epilogue_peeling
+tt.func @matmul_ws_epilogue_peeling(
+  %a_desc: !tt.tensordesc<128x64xf16, #shared>,
+  %b_desc: !tt.tensordesc<64x128xf16, #shared>
+) {
+  %c0_i32 = arith.constant 0 : i32
+  %c1_i32 = arith.constant 1 : i32
+  %true = arith.constant true
+  %false = arith.constant false
+  %zero = arith.constant dense<0.0> : tensor<128x128xf32, #acc_layout>
+  %k_tiles = arith.constant 32 : i32
+
+  // PEELING-LABEL: ttg.warp_specialize
+  // PEELING: partition0
+  // PEELING-COUNT-2: ttng.tc_gen5_mma
+  // PEELING-NOT: ttng.tc_gen5_mma
+  %loop_out:2 = scf.for %k = %c0_i32 to %k_tiles step %c1_i32 iter_args(%acc = %zero, %flag = %true) -> (tensor<128x128xf32, #acc_layout>, i1) : i32 {
+    %a = tt.descriptor_load %a_desc[%c0_i32, %k] : !tt.tensordesc<128x64xf16, #shared> -> tensor<128x64xf16, #oper_layout>
+    %b = tt.descriptor_load %b_desc[%c0_i32, %k] : !tt.tensordesc<64x128xf16, #shared> -> tensor<64x128xf16, #oper_layout>
+    %a_shared = ttg.local_alloc %a : (tensor<128x64xf16, #oper_layout>) -> !ttg.memdesc<128x64xf16, #shared, #smem>
+    %b_shared = ttg.local_alloc %b : (tensor<64x128xf16, #oper_layout>) -> !ttg.memdesc<64x128xf16, #shared, #smem>
+    %c_tmem, %c_tok = ttng.tmem_alloc %acc : (tensor<128x128xf32, #acc_layout>) -> (!ttg.memdesc<128x128xf32, #acc_tmem, #ttng.tensor_memory, mutable>, !ttg.async.token)
+    %mma_tok = ttng.tc_gen5_mma %a_shared, %b_shared, %c_tmem[%c_tok], %flag, %true : !ttg.memdesc<128x64xf16, #shared, #smem>, !ttg.memdesc<64x128xf16, #shared, #smem>, !ttg.memdesc<128x128xf32, #acc_tmem, #ttng.tensor_memory, mutable>
+    %c, %load_tok = ttng.tmem_load %c_tmem[%mma_tok] : !ttg.memdesc<128x128xf32, #acc_tmem, #ttng.tensor_memory, mutable> -> tensor<128x128xf32, #acc_layout>
+    scf.yield %c, %true : tensor<128x128xf32, #acc_layout>, i1
+  } {tt.warp_specialize, tt.num_stages = 4 : i32}
+
+  "use"(%loop_out#0) : (tensor<128x128xf32, #acc_layout>) -> ()
+  tt.return
+}
 }

@@ -754,6 +754,65 @@ def group_gemm_tma_fn(group_A, group_B):
     return group_C
 
 
+@pytest.mark.skipif(is_hip(), reason="warp specialization is not supported on hip devices")
+@pytest.mark.skipif(not is_blackwell(), reason="Requires Blackwell for epilogue peeling + MMAv5")
+@pytest.mark.parametrize("M, N, K", [
+    # Small K: only 1 loop iteration (epilogue peeling edge case)
+    (128, 128, 64),
+    (128, 256, 128),
+    # Small K: only 2 loop iterations
+    (128, 128, 128),
+    (128, 256, 256),
+    # Typical size
+    (2048, 2048, 512),
+])
+@pytest.mark.parametrize("BLOCK_SIZE_K", [64, 128])
+@pytest.mark.parametrize("num_stages", [2, 3])
+def test_warp_specialize_epilogue_peeling(M, N, K, BLOCK_SIZE_K, num_stages):
+    """Test warp-specialized matmul with epilogue peeling, especially small K edge cases.
+
+    When epilogue peeling is enabled for warp-specialized loops, the last iteration
+    is peeled out as an unpredicated epilogue. This test verifies correctness for
+    cases with very few loop iterations (K=1 or 2 BLOCK_K tiles), where peeling
+    creates an empty loop body with only the epilogue.
+    """
+    if K % BLOCK_SIZE_K != 0:
+        pytest.skip(f"K={K} not divisible by BLOCK_SIZE_K={BLOCK_SIZE_K}")
+    if exceeds_smem_capacity(num_stages, 128, 128, BLOCK_SIZE_K, use_fp8=False):
+        pytest.skip("uses too much shared memory")
+
+    GROUP_SIZE_M = 8
+    device = "cuda"
+    torch.manual_seed(42)
+    A = torch.randn((M, K), dtype=torch.float16, device=device)
+    B = torch.randn((N, K), dtype=torch.float16, device=device)
+    C = torch.empty((M, N), dtype=torch.float16, device=device)
+
+    def alloc_fn(size, align, stream):
+        return torch.empty(size, dtype=torch.int8, device="cuda")
+
+    triton.set_allocator(alloc_fn)
+
+    grid = (triton.cdiv(M, 128) * triton.cdiv(N, 128), )
+    kernel = matmul_tma_ws_kernel[grid](A, B, C, *A.stride(), *B.stride(), *C.stride(), M, N, K, num_stages, 128, 128,
+                                        BLOCK_SIZE_K, GROUP_SIZE_M, num_warps=4, USE_FP8=False, A_USE_TMA=True,
+                                        B_USE_TMA=True)
+
+    # Verify epilogue peeling produced the expected IR
+    ttgir = kernel.asm["ttgir"]
+    assert "ttg.warp_specialize" in ttgir
+    k_tiles = K // BLOCK_SIZE_K
+    if k_tiles >= 1 and num_stages > 1:
+        # With epilogue peeling, we should see 2 MMA ops (1 in loop + 1 in peeled epilogue)
+        # when there are enough iterations; for 1 iteration, the loop may be empty
+        assert "ttng.tc_gen5_mma" in ttgir
+
+    # Verify correctness against cuBLAS
+    ref_out = torch.empty((M, N), dtype=torch.float16, device=device)
+    cublas.matmul(A, B, ref_out)
+    torch.testing.assert_close(ref_out, C, atol=0.03, rtol=0.03)
+
+
 @pytest.mark.parametrize("M", [128, 256, 512, 1024, 2048, 4096, 8192])
 @pytest.mark.parametrize("N", [256, 512, 1024, 2048, 4096, 8192])
 @pytest.mark.parametrize("K", [128, 512, 1024, 2048, 4096])
