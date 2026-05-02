@@ -179,6 +179,13 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
             info["requested_registers"] = req.group(1)
         nw = re.findall(r'num_warps\((\d+)\)', ttgir)
         info["partition_num_warps"] = nw
+
+        # Extract warp_specialize section for debugging
+        ws_match = re.search(
+            r'ttg\.warp_specialize(.*?)(?:\n  } \{|\n\s*\})', ttgir, re.DOTALL
+        )
+        if ws_match:
+            info["warp_specialize_snippet"] = ws_match.group(0)[:2000]  # first 2000 chars
     except Exception as e:
         info["ir_error"] = str(e)
 
@@ -202,6 +209,7 @@ def main():
     parser.add_argument("--output", default="results_reg_estimate.json")
     parser.add_argument("--dump-ir", action="store_true")
     parser.add_argument("--shapes", nargs="*", help="Override shapes (MxNxK)")
+    parser.add_argument("--debug-dir", help="Save full ttgir files to this directory")
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -249,6 +257,28 @@ def main():
                 print(f"  tc_gen5_mma count: {ir_info['tc_gen5_mma_count']}")
             if "partition_num_warps" in ir_info:
                 print(f"  partition_num_warps: {ir_info['partition_num_warps']}")
+            if "warp_specialize_snippet" in ir_info:
+                print(f"  ws snippet:\n{ir_info['warp_specialize_snippet'][:500]}")
+
+            # Save full ttgir for offline analysis
+            if args.debug_dir:
+                os.makedirs(args.debug_dir, exist_ok=True)
+                ttgir_path = os.path.join(args.debug_dir, f"ttgir_{name}.txt")
+                # Re-compile to get ttgir (already cached)
+                a = torch.randn((M, K), device='cuda', dtype=torch.float16)
+                b = torch.randn((N, K), device='cuda', dtype=torch.float16)
+                c = torch.randn((M, N), device='cuda', dtype=torch.float16)
+                def alloc_fn(size, align, stream):
+                    return torch.empty(size, dtype=torch.int8, device="cuda")
+                triton.set_allocator(alloc_fn)
+                grid = lambda META: (triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),)
+                k = matmul_tma_ws_kernel[grid](a, b, c,
+                    a.stride(0), a.stride(1), b.stride(0), b.stride(1),
+                    c.stride(0), c.stride(1), M, N, K,
+                    num_stages=3, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64)
+                with open(ttgir_path, "w") as f:
+                    f.write(k.asm["ttgir"])
+                print(f"  ttgir saved to {ttgir_path}")
 
         results.append(result)
 
