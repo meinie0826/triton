@@ -140,11 +140,8 @@ static LogicalResult relayoutWarps(ModuleAxisInfoAnalysis &axisInfo,
 // optimizePartitionWarps
 //===----------------------------------------------------------------------===//
 
-// Get the number of i32 registers required to store a tensor.
-static unsigned getTensorNumI32Regs(RankedTensorType ty) {
-  unsigned numElems = getTotalElemsPerThread(ty) *
-                      product(getThreadsPerWarp(ty)) *
-                      product(getWarpsPerCTA(ty));
+static unsigned getTensorPerThreadRegs(RankedTensorType ty) {
+  unsigned numElems = getTotalElemsPerThread(ty);
   unsigned elSize =
       isa<PointerType>(ty.getElementType()) ? 64 : ty.getElementTypeBitWidth();
   return numElems * elSize / 32;
@@ -153,25 +150,32 @@ static unsigned getTensorNumI32Regs(RankedTensorType ty) {
 static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
                                                WarpSpecializeOp wsOp,
                                                RunPipelineFn runPipeline) {
-  // Extremely rough estimate of the number of registers needed per partition.
-  // For each partition, get the number of i32 registers used by the largest
-  // tensor value.
-  //
-  // Because the partition region is isolated from above, we could in theory
-  // compile it to PTX and read the number of registers that got allocated.
-  SmallVector<unsigned> maxTensorRegs;
+  // Estimate the peak per-thread register pressure per partition.
+  // For warp count reduction, we need the per-thread register count of the
+  // largest tensor (when warps are halved, each thread's share doubles).
+  // For requested registers, we sum per-thread regs of all tensors to
+  // account for multiple simultaneously-live values (accumulator + buffers).
+  SmallVector<unsigned> maxPerThreadRegs;
+  SmallVector<unsigned> sumPerThreadRegs;
   for (Region *partition : wsOp.getPartitionRegions()) {
-    unsigned &tensorRegs = maxTensorRegs.emplace_back(0);
+    unsigned &maxRegs = maxPerThreadRegs.emplace_back(0);
+    unsigned &sumRegs = sumPerThreadRegs.emplace_back(0);
+    // Track which tensor types we've already counted to avoid duplicates
+    // (same tensor appearing as both operand and result).
+    DenseSet<RankedTensorType> seen;
     partition->walk([&](Operation *op) {
       for (Type type :
            llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes())) {
-        if (auto tensor = dyn_cast<RankedTensorType>(type))
-          tensorRegs = std::max(tensorRegs, getTensorNumI32Regs(tensor));
+        if (auto tensor = dyn_cast<RankedTensorType>(type)) {
+          unsigned regs = getTensorPerThreadRegs(tensor);
+          maxRegs = std::max(maxRegs, regs);
+          if (!seen.contains(tensor)) {
+            seen.insert(tensor);
+            sumRegs += regs;
+          }
+        }
       }
     });
-    // Assume that the largest tensor accounts for half of the registers used
-    // by a warpgroup.
-    tensorRegs *= 2;
   }
 
   // Reduce the number of warps used by partitions. For partitions with no
@@ -235,13 +239,14 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
     int32_t curTotalNumWarps = std::accumulate(
         partitionNumWarps.begin(), partitionNumWarps.end(), defaultNumWarps);
 
-    for (auto [minWarps, numWarps, tensorRegs] :
-         llvm::zip(minWarpsForPartition, partitionNumWarps, maxTensorRegs)) {
+    for (auto [minWarps, numWarps, maxRegs] :
+         llvm::zip(minWarpsForPartition, partitionNumWarps, maxPerThreadRegs)) {
       if (numWarps <= minWarps)
         continue;
-      // Check if reducing the number of warps will still fit the tensor. If it
-      // didn't fit to begin with, it won't fit after shrinking.
-      unsigned reqRegsPerThread = tensorRegs / threadsPerWarp / (numWarps / 2);
+      // When halving the number of warps, each thread will hold twice as many
+      // elements from the largest tensor. Check that this still fits within
+      // the register budget.
+      unsigned reqRegsPerThread = maxRegs * (numWarps / (numWarps / 2));
       unsigned nextTotalNumWarps = curTotalNumWarps - (numWarps / 2);
       unsigned nextRegsPerThread =
           nTotalRegs / threadsPerWarp / nextTotalNumWarps;
@@ -254,15 +259,20 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
   } while (changed);
 
   SmallVector<int32_t> estRegUsage(partitionNumWarps.size());
-  for (auto [partition, newNumWarps, prevNumWarps, tensorRegs, estRegs] :
+  for (auto [partition, newNumWarps, prevNumWarps, maxRegs, sumRegs, estRegs] :
        llvm::zip(wsOp.getPartitionRegions(), partitionNumWarps,
-                 wsOp.getPartitionNumWarps(), maxTensorRegs, estRegUsage)) {
-    // "Guess" the register usage for each partition.
-    estRegs = tensorRegs ? 88 : 24;
+                 wsOp.getPartitionNumWarps(), maxPerThreadRegs,
+                 sumPerThreadRegs, estRegUsage)) {
+    // Estimate register usage based on the sum of per-thread register counts
+    // of all distinct tensors in the partition. This accounts for multiple
+    // simultaneously-live values (e.g., accumulator + input buffers in
+    // pipelined matmul) without relying on an arbitrary multiplier on the
+    // max tensor.
+    estRegs = sumRegs ? std::max<int32_t>(sumRegs, 40) : 24;
 
     // Layouts need to be reassigned if the number of warps changed and there
     // are tensor computations.
-    if (newNumWarps == prevNumWarps || !tensorRegs)
+    if (newNumWarps == prevNumWarps || !maxRegs)
       continue;
     // We need to reassign layouts.
     if (failed(relayoutWarps(axisInfo, partition, prevNumWarps, newNumWarps,
