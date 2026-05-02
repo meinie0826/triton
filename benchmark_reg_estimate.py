@@ -101,15 +101,20 @@ def benchmark_fn(fn, n_warmup=10, n_repeat=100):
 
 
 def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
+    # TMA kernels need allocator for global scratch
+    def alloc_fn(size, align, stream):
+        return torch.empty(size, dtype=torch.int8, device="cuda")
+    triton.set_allocator(alloc_fn)
+
     a = torch.randn((M, K), device='cuda', dtype=torch.float16)
-    b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # note: b is [N, K] for b.T
+    b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # [N, K] for b.T
+    c = torch.empty((M, N), device='cuda', dtype=torch.float16)
 
     grid = lambda META: (
         triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
     )
 
     def fn():
-        c = torch.empty((M, N), device='cuda', dtype=torch.float16)
         matmul_tma_ws_kernel[grid](
             a, b, c,
             a.stride(0), a.stride(1),
