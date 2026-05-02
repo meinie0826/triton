@@ -1,0 +1,110 @@
+[
+  {
+    "name": "small_128",
+    "M": 128,
+    "N": 128,
+    "K": 128,
+    "triton_ms": 0.03206720005720854,
+    "triton_tflops": 0.13079732538286085,
+    "cublas_tflops": 0.19534994647597093,
+    "ratio_pct": 66.95539350912983,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  },
+  {
+    "name": "medium_256",
+    "M": 256,
+    "N": 256,
+    "K": 256,
+    "triton_ms": 0.040220479927957055,
+    "triton_tflops": 0.8342623474434596,
+    "cublas_tflops": 1.3804863284350775,
+    "ratio_pct": 60.43249616163757,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  },
+  {
+    "name": "medium_512",
+    "M": 512,
+    "N": 512,
+    "K": 512,
+    "triton_ms": 0.04059615988284349,
+    "triton_tflops": 6.612336161220131,
+    "cublas_tflops": 10.937905662000624,
+    "ratio_pct": 60.45340274045374,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  },
+  {
+    "name": "large_1k",
+    "M": 1024,
+    "N": 1024,
+    "K": 1024,
+    "triton_ms": 0.04086432002484799,
+    "triton_tflops": 52.55155712108264,
+    "cublas_tflops": 86.27814172218208,
+    "ratio_pct": 60.909467997468056,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  },
+  {
+    "name": "large_2k",
+    "M": 2048,
+    "N": 2048,
+    "K": 2048,
+    "triton_ms": 0.056727040000259875,
+    "triton_tflops": 302.85150051758905,
+    "cublas_tflops": 567.1271453020045,
+    "ratio_pct": 53.40098830154139,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  },
+  {
+    "name": "large_4k",
+    "M": 4096,
+    "N": 4096,
+    "K": 4096,
+    "triton_ms": 0.2009100802242756,
+    "triton_tflops": 684.0819202231024,
+    "cublas_tflops": 1388.6088904334215,
+    "ratio_pct": 49.26382978936441,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ],
+    "warp_specialize_snippet": "ttg.warp_specialize(%accumulator_25, %accumulator_20, %a, %accumulator_18, %accumulator_21, %k_tiles_14, %accumulator_16, %a_desc_2, %off_am, %b_desc_5, %off_bn) attributes {requestedRegisters = array<i32: 24, 24>}\n    default {\n      ttg.warp_yield loc(#loc60)\n    }"
+  }
+]
