@@ -1,14 +1,10 @@
 """
 A/B benchmark for register estimation optimization in optimizePartitionWarps.
 
-Benchmarks warp-specialized matmul with:
-  - Triton (warp_specialize=True) → our kernel
-  - cuBLAS baseline (torch.matmul) → for reference
-
-Outputs TFLOPS + IR info (partition warp counts, requestedRegisters).
+Uses TMA + warp_specialize matmul kernel (required on Blackwell).
+Outputs TFLOPS + IR info (requestedRegisters, partition warp counts).
 
 Usage on B300:
-  # After compiling Triton:
   python benchmark_reg_estimate.py --output results.json --dump-ir
 """
 
@@ -28,47 +24,60 @@ except ImportError:
     is_hip = False
     is_blackwell = True
 
+from triton.tools.tensor_descriptor import TensorDescriptor
 
-# ─── Warp-specialized matmul kernel ───
+
+# ─── Warp-specialized TMA matmul kernel ───
 
 @triton.jit
-def matmul_ws_kernel(
+def _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_SIZE_M: tl.constexpr):
+    num_pid_in_group = GROUP_SIZE_M * num_pid_n
+    group_id = tile_id // num_pid_in_group
+    first_pid_m = group_id * GROUP_SIZE_M
+    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    pid_m = first_pid_m + (tile_id % group_size_m)
+    pid_n = (tile_id % num_pid_in_group) // group_size_m
+    return pid_m, pid_n
+
+
+@triton.jit
+def matmul_tma_ws_kernel(
     a_ptr, b_ptr, c_ptr,
+    a_stride0, a_stride1,
+    b_stride0, b_stride1,
+    c_stride0, c_stride1,
     M, N, K,
-    stride_am, stride_ak,
-    stride_bk, stride_bn,
-    stride_cm, stride_cn,
-    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+    num_stages: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
     GROUP_M: tl.constexpr = 8,
 ):
+    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_K])
+    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
+                                       block_shape=[BLOCK_N, BLOCK_K])
+    c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_N])
+
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
     num_pid_n = tl.cdiv(N, BLOCK_N)
-    num_pid_in_group = GROUP_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_M
-    group_size = min(num_pid_m - first_pid_m, GROUP_M)
-    pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size)
-    pid_n = (pid % num_pid_in_group) // group_size
+    pid_m, pid_n = _compute_pid(pid, num_pid_n, num_pid_m, GROUP_M)
 
-    offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    offs_k = tl.arange(0, BLOCK_K)
-
-    a_ptrs = a_ptr + (offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_n[None, :] * stride_bn)
+    k_tiles = tl.cdiv(K, BLOCK_K)
+    off_am = pid_m * BLOCK_M
+    off_bn = pid_n * BLOCK_N
 
     accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    for k_iter in tl.range(0, K, BLOCK_K, warp_specialize=True):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k_iter, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k_iter, other=0.0)
-        accumulator += tl.dot(a, b)
-        a_ptrs += BLOCK_K * stride_ak
-        b_ptrs += BLOCK_K * stride_bk
+    for k in tl.range(k_tiles, warp_specialize=True, num_stages=num_stages):
+        off_k = k * BLOCK_K
+        a = a_desc.load((off_am, off_k))
+        b = b_desc.load((off_bn, off_k))
+        accumulator = tl.dot(a, b.T, accumulator)
 
-    c_ptrs = c_ptr + (offs_m[:, None] * stride_cm + offs_n[None, :] * stride_cn)
-    c_mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
-    tl.store(c_ptrs, accumulator, mask=c_mask)
+    c = accumulator.to(tl.float16)
+    c_desc.store((off_am, off_bn), c)
 
 
 # ─── Timing ───
@@ -88,13 +97,12 @@ def benchmark_fn(fn, n_warmup=10, n_repeat=100):
         torch.cuda.synchronize()
         times.append(start.elapsed_time(end))
 
-    avg_ms = sum(times) / len(times)
-    return avg_ms
+    return sum(times) / len(times)
 
 
-def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
+def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     a = torch.randn((M, K), device='cuda', dtype=torch.float16)
-    b = torch.randn((K, N), device='cuda', dtype=torch.float16)
+    b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # note: b is [N, K] for b.T
 
     grid = lambda META: (
         triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
@@ -102,11 +110,13 @@ def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
 
     def fn():
         c = torch.empty((M, N), device='cuda', dtype=torch.float16)
-        matmul_ws_kernel[grid](
-            a, b, c, M, N, K,
+        matmul_tma_ws_kernel[grid](
+            a, b, c,
             a.stride(0), a.stride(1),
             b.stride(0), b.stride(1),
             c.stride(0), c.stride(1),
+            M, N, K,
+            num_stages=num_stages,
             BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
         )
 
@@ -116,7 +126,6 @@ def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
 
 
 def run_cublas(M, N, K):
-    """cuBLAS baseline via torch.matmul (fp16 input, fp16 output)."""
     a = torch.randn((M, K), device='cuda', dtype=torch.float16)
     b = torch.randn((K, N), device='cuda', dtype=torch.float16)
 
@@ -130,8 +139,7 @@ def run_cublas(M, N, K):
 
 # ─── IR dump ───
 
-def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
-    """Dump ttgir info via triton.compile()."""
+def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     import triton.compiler
     from triton.backends.compiler import GPUTarget
 
@@ -140,15 +148,19 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
 
     sig = {
         "a_ptr": "*fp16", "b_ptr": "*fp16", "c_ptr": "*fp16",
+        "a_stride0": "i32", "a_stride1": "i32",
+        "b_stride0": "i32", "b_stride1": "i32",
+        "c_stride0": "i32", "c_stride1": "i32",
         "M": "i32", "N": "i32", "K": "i32",
-        "stride_am": "i32", "stride_ak": "i32",
-        "stride_bk": "i32", "stride_bn": "i32",
-        "stride_cm": "i32", "stride_cn": "i32",
     }
     src = triton.compiler.ASTSource(
-        fn=matmul_ws_kernel,
+        fn=matmul_tma_ws_kernel,
         signature=sig,
-        constexprs={"BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "BLOCK_K": BLOCK_K, "GROUP_M": 8},
+        constexprs={
+            "num_stages": num_stages,
+            "BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "BLOCK_K": BLOCK_K,
+            "GROUP_M": 8,
+        },
     )
     compiled = triton.compile(src, target=target)
 
@@ -173,16 +185,12 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
 # ─── Shapes ───
 
 SHAPES = [
-    ("tiny_64",    64,   64,  64),
     ("small_128",  128,  128, 128),
     ("medium_256", 256,  256, 256),
     ("medium_512", 512,  512, 512),
     ("large_1k",   1024, 1024, 1024),
     ("large_2k",   2048, 2048, 2048),
     ("large_4k",   4096, 4096, 4096),
-    # Non-square
-    ("tall_256_64", 256,  64,  256),
-    ("wide_64_256", 64,   256, 256),
 ]
 
 
@@ -191,7 +199,6 @@ def main():
     parser.add_argument("--output", default="results_reg_estimate.json")
     parser.add_argument("--dump-ir", action="store_true")
     parser.add_argument("--shapes", nargs="*", help="Override shapes (MxNxK)")
-    parser.add_argument("--skip-cublas", action="store_true", help="Skip cuBLAS baseline")
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -207,14 +214,15 @@ def main():
     for name, M, N, K in shapes:
         print(f"\n=== {name}: {M}x{N}x{K} ===")
 
-        # Triton warp-specialized
         os.system("rm -rf ~/.triton/cache")
+
+        # Triton TMA warp-specialized
         triton_ms, triton_tflops = run_triton_ws(M, N, K)
         print(f"  Triton WS: {triton_ms:.3f} ms, {triton_tflops:.3f} TFLOPS")
 
-        # cuBLAS
+        # cuBLAS baseline
         cublas_tflops = 0
-        if not args.skip_cublas and M >= 128 and N >= 128 and K >= 128:
+        if M >= 128 and N >= 128 and K >= 128:
             cublas_ms, cublas_tflops = run_cublas(M, N, K)
             ratio = triton_tflops / cublas_tflops * 100 if cublas_tflops > 0 else 0
             print(f"  cuBLAS:    {cublas_ms:.3f} ms, {cublas_tflops:.3f} TFLOPS")
@@ -228,11 +236,16 @@ def main():
         }
 
         if args.dump_ir:
-            os.system("rm -rf ~/.triton/cache")
             ir_info = dump_ir_info(M, N, K)
             result.update(ir_info)
+            if "has_warp_specialize" in ir_info:
+                print(f"  warp_specialize: {ir_info['has_warp_specialize']}")
             if "requested_registers" in ir_info:
                 print(f"  requestedRegisters: {ir_info['requested_registers']}")
+            if "tc_gen5_mma_count" in ir_info:
+                print(f"  tc_gen5_mma count: {ir_info['tc_gen5_mma_count']}")
+            if "partition_num_warps" in ir_info:
+                print(f"  partition_num_warps: {ir_info['partition_num_warps']}")
 
         results.append(result)
 
