@@ -1,0 +1,14 @@
+{
+  "device": "B200",
+  "dtype": "fp16",
+  "M": 8192,
+  "N": 8192,
+  "data": [
+    {"K": 128,  "cuBLAS": 582,   "naive": 365,  "tma": 434,  "tma_ws": 256,  "tma_persistent_ws": 558},
+    {"K": 640,  "cuBLAS": 1111,  "naive": 796,  "tma": 884,  "tma_ws": 782,  "tma_persistent_ws": 1114},
+    {"K": 1152, "cuBLAS": 1233,  "naive": 920,  "tma": 988,  "tma_ws": 963,  "tma_persistent_ws": 1146},
+    {"K": 2688, "cuBLAS": 1331,  "naive": 1048, "tma": 1127, "tma_ws": 1120, "tma_persistent_ws": 1260},
+    {"K": 5248, "cuBLAS": 1350,  "naive": 1085, "tma": 1140, "tma_ws": 1148, "tma_persistent_ws": 1217},
+    {"K": 7808, "cuBLAS": 1326,  "naive": 1090, "tma": 1144, "tma_ws": 1170, "tma_persistent_ws": 1226}
+  ]
+}
