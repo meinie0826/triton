@@ -133,7 +133,7 @@ def run_cublas(M, N, K):
 def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
     """Dump ttgir info via triton.compile()."""
     import triton.compiler
-    from triton._C.libtriton import GPUTarget
+    from triton.backends.compiler import GPUTarget
 
     major, minor = torch.cuda.get_device_capability(0)
     target = GPUTarget("cuda", major * 10 + minor, 32)
