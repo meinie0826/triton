@@ -144,6 +144,22 @@ static void peelPrologueForMMAv5AccUse(
   }
 }
 
+static void
+processLoopBodyOps(scf::ForOp forOp,
+                   function_ref<Operation *(RewriterBase &, Operation *, bool)>
+                       processPeeledOp) {
+  if (!processPeeledOp)
+    return;
+
+  IRRewriter rewriter(forOp);
+  for (auto &op :
+       llvm::make_early_inc_range(forOp.getBody()->without_terminator())) {
+    Operation *newOp = processPeeledOp(rewriter, &op, /*isEpilogue=*/false);
+    if (newOp && newOp != &op)
+      op.replaceAllUsesWith(newOp);
+  }
+}
+
 static void expandLoops(ModuleOp moduleOp) {
   DenseSet<MaskOp> peeledMaskOps;
   auto processPeeledEpilogueOp = [&](RewriterBase &rewriter, Operation *op,
@@ -222,8 +238,12 @@ static void expandLoops(ModuleOp moduleOp) {
     forOp = *newForOp;
     if (customEpiloguePeeling) {
       SmallVector<BlockArgument> accUseArgs = getMMAv5AccUseArgsToPeel(forOp);
-      peelPrologueForMMAv5AccUse(forOp, accUseArgs, processPeeledEpilogueOp);
-      mlir::triton::peelLoopEpilogue(forOp, processPeeledEpilogueOp);
+      if (forOp->hasAttr(kWarpSpecializeAttrName) && !accUseArgs.empty()) {
+        peelPrologueForMMAv5AccUse(forOp, accUseArgs, processPeeledEpilogueOp);
+        processLoopBodyOps(forOp, processPeeledEpilogueOp);
+      } else {
+        mlir::triton::peelLoopEpilogue(forOp, processPeeledEpilogueOp);
+      }
     }
 
     // Prune all the statically dead mask ops in the epilogue. This is a

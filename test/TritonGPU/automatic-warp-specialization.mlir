@@ -396,11 +396,11 @@ module attributes {"ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.targ
 
 // -----
 
-// Test that epilogue peeling works for warp-specialized MMAv5 loops and that
+// Test that prologue peeling works for warp-specialized MMAv5 loops and that
 // the main loop's MMAv5 accumulator-use flag is no longer loop-carried.
 // With num_stages=4, the pipelined loop will have wait barriers in the last
-// stage, triggering customEpiloguePeeling. The first iteration is peeled into a
-// prologue so the remaining loop body can use the accumulator unconditionally.
+// stage. The first iteration is peeled into a prologue so the remaining loop
+// body can use the accumulator unconditionally.
 #acc_layout = #ttg.blocked<{sizePerThread = [1, 128], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>
 #oper_layout = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [2, 2], order = [1, 0]}>
 #shared = #ttg.nvmma_shared<{swizzlingByteWidth = 128, transposed = false, elementBitWidth = 16}>
@@ -426,8 +426,6 @@ tt.func @matmul_ws_epilogue_peeling(
   // PEELING: ttng.tc_gen5_mma
   // PEELING: scf.for
   // PEELING: ttng.tc_gen5_mma {{.*}}, %true{{.*}}, %true
-  // PEELING: scf.if
-  // PEELING: ttng.tc_gen5_mma
   // PEELING-NOT: ttng.tc_gen5_mma
   %loop_out:2 = scf.for %k = %c0_i32 to %k_tiles step %c1_i32 iter_args(%acc = %zero, %flag = %false) -> (tensor<128x128xf32, #acc_layout>, i1) : i32 {
     %a = tt.descriptor_load %a_desc[%c0_i32, %k] : !tt.tensordesc<128x64xf16, #shared> -> tensor<128x64xf16, #oper_layout>
