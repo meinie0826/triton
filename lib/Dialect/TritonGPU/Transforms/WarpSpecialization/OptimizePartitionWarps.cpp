@@ -209,8 +209,8 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
 
   // Determine if a partition has a lower limit on the number of warps.
   SmallVector<int32_t> minWarpsForPartition(partitionNumWarps.size(), 1);
-  for (auto [minWarps, region] :
-       llvm::zip(minWarpsForPartition, wsOp.getPartitionRegions())) {
+  for (auto [minWarps, region, hasDot] :
+       llvm::zip(minWarpsForPartition, wsOp.getPartitionRegions(), hasMMAOp)) {
     region->walk([minWarps = &minWarps](Operation *op) {
       // Some instructions have critical throughput if have low register usage.
       // Make sure there are enough warps for these ops to execute quickly.
@@ -222,6 +222,12 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
       else if (isa<ttng::TMEMLoadOp, ttng::TMEMStoreOp, ttng::TMEMAllocOp>(op))
         *minWarps = 4;
     });
+    // MMA partitions (DotOpInterface ops like tc_gen5_mma) need at least 4
+    // warps (a full warp group) so that AllocateWarpGroups can emit
+    // setmaxnreg instructions. Without this, totalPartitionWarps % 4 != 0
+    // and setmaxnreg is skipped, making requestedRegisters a no-op.
+    if (hasDot)
+      minWarps = std::max(minWarps, 4);
   }
 
   bool changed;
