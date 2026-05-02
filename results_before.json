@@ -1,0 +1,101 @@
+[
+  {
+    "name": "tiny_64",
+    "M": 64,
+    "N": 64,
+    "K": 64,
+    "triton_ms": 0.03333919998258352,
+    "triton_tflops": 0.015725872254699853,
+    "cublas_tflops": 0,
+    "ratio_pct": 0,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "small_128",
+    "M": 128,
+    "N": 128,
+    "K": 128,
+    "triton_ms": 0.03221311997622252,
+    "triton_tflops": 0.13020483588972268,
+    "cublas_tflops": 0.19358707452036852,
+    "ratio_pct": 67.25905446544832,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "medium_256",
+    "M": 256,
+    "N": 256,
+    "K": 256,
+    "triton_ms": 0.03537664014846086,
+    "triton_tflops": 0.9484912037770171,
+    "cublas_tflops": 1.610196403806803,
+    "ratio_pct": 58.90531127349483,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "medium_512",
+    "M": 512,
+    "N": 512,
+    "K": 512,
+    "triton_ms": 0.033322239741683,
+    "triton_tflops": 8.055744694262323,
+    "cublas_tflops": 12.711167737170467,
+    "ratio_pct": 63.37533152603609,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "large_1k",
+    "M": 1024,
+    "N": 1024,
+    "K": 1024,
+    "triton_ms": 0.033228799998760224,
+    "triton_tflops": 64.62718027976102,
+    "cublas_tflops": 98.78393170069153,
+    "ratio_pct": 65.42276579512638,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "large_2k",
+    "M": 2048,
+    "N": 2048,
+    "K": 2048,
+    "triton_ms": 0.04390560012310743,
+    "triton_tflops": 391.29106847028993,
+    "cublas_tflops": 610.4621212039434,
+    "ratio_pct": 64.09751807345427,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "large_4k",
+    "M": 4096,
+    "N": 4096,
+    "K": 4096,
+    "triton_ms": 0.1479267194867134,
+    "triton_tflops": 929.1016115877875,
+    "cublas_tflops": 1426.866258530088,
+    "ratio_pct": 65.11483511740744,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "tall_256_64",
+    "M": 256,
+    "N": 64,
+    "K": 256,
+    "triton_ms": 0.03206816015765071,
+    "triton_tflops": 0.26158681878725354,
+    "cublas_tflops": 0,
+    "ratio_pct": 0,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  },
+  {
+    "name": "wide_64_256",
+    "M": 64,
+    "N": 256,
+    "K": 256,
+    "triton_ms": 0.03238560002297163,
+    "triton_tflops": 0.2590227753708384,
+    "cublas_tflops": 0,
+    "ratio_pct": 0,
+    "ir_error": "'Tensor' object has no attribute 'device_driver'; 'function' object has no attribute '_triton_kernel_'"
+  }
+]
