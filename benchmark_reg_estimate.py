@@ -131,29 +131,30 @@ def run_cublas(M, N, K):
 # ─── IR dump ───
 
 def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
-    a = torch.randn((M, K), device='cuda', dtype=torch.float16)
-    b = torch.randn((K, N), device='cuda', dtype=torch.float16)
-    c = torch.empty((M, N), device='cuda', dtype=torch.float16)
+    """Dump ttgir info via triton.compile()."""
+    import triton.compiler
+    from triton._C.libtriton import GPUTarget
 
-    grid = lambda META: (
-        triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
-    )
+    major, minor = torch.cuda.get_device_capability(0)
+    target = GPUTarget("cuda", major * 10 + minor, 32)
 
-    # Run once to compile
-    matmul_ws_kernel[grid](
-        a, b, c, M, N, K,
-        a.stride(0), a.stride(1),
-        b.stride(0), b.stride(1),
-        c.stride(0), c.stride(1),
-        BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
+    sig = {
+        "a_ptr": "*fp16", "b_ptr": "*fp16", "c_ptr": "*fp16",
+        "M": "i32", "N": "i32", "K": "i32",
+        "stride_am": "i32", "stride_ak": "i32",
+        "stride_bk": "i32", "stride_bn": "i32",
+        "stride_cm": "i32", "stride_cn": "i32",
+    }
+    src = triton.compiler.ASTSource(
+        fn=matmul_ws_kernel,
+        signature=sig,
+        constexprs={"BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "BLOCK_K": BLOCK_K, "GROUP_M": 8},
     )
+    compiled = triton.compile(src, target=target)
 
     info = {}
     try:
-        ttgir = c.device_driver.get_kernel(
-            matmul_ws_kernel[grid].fn,
-            matmul_ws_kernel[grid].warmup
-        ).asm["ttgir"]
+        ttgir = compiled.asm["ttgir"]
         info["has_warp_specialize"] = "ttg.warp_specialize" in ttgir
         info["tc_gen5_mma_count"] = ttgir.count("ttng.tc_gen5_mma")
 
@@ -164,21 +165,7 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64):
         nw = re.findall(r'num_warps\((\d+)\)', ttgir)
         info["partition_num_warps"] = nw
     except Exception as e:
-        # Try alternative access path
-        try:
-            import triton.compiler as tc
-            kernel = matmul_ws_kernel[grid]
-            # The kernel stores compiled metadata
-            compiled_kernel = kernel._triton_kernel_
-            ttgir = compiled_kernel.asm["ttgir"]
-            info["has_warp_specialize"] = "ttg.warp_specialize" in ttgir
-            info["tc_gen5_mma_count"] = ttgir.count("ttng.tc_gen5_mma")
-            import re
-            req = re.search(r'requestedRegisters\s*=\s*array<i32:\s*(.*?)>', ttgir)
-            if req:
-                info["requested_registers"] = req.group(1)
-        except Exception as e2:
-            info["ir_error"] = f"{e}; {e2}"
+        info["ir_error"] = str(e)
 
     return info
 
