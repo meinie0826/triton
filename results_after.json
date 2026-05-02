@@ -1,119 +1,104 @@
 [
   {
-    "name": "tiny_64",
-    "M": 64,
-    "N": 64,
-    "K": 64,
-    "triton_ms": 0.032609280049800876,
-    "triton_tflops": 0.016077877193219466,
-    "cublas_tflops": 0,
-    "ratio_pct": 0,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
-  },
-  {
     "name": "small_128",
     "M": 128,
     "N": 128,
     "K": 128,
-    "triton_ms": 0.03248192006722093,
-    "triton_tflops": 0.1291273419588479,
-    "cublas_tflops": 0.20686868677332917,
-    "ratio_pct": 62.419955370208214,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.031608320008963346,
+    "triton_tflops": 0.13269620146880942,
+    "cublas_tflops": 0.18784682446495687,
+    "ratio_pct": 70.64064130270357,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   },
   {
     "name": "medium_256",
     "M": 256,
     "N": 256,
     "K": 256,
-    "triton_ms": 0.03186111997812986,
-    "triton_tflops": 1.053146657212065,
-    "cublas_tflops": 1.7286119315648274,
-    "ratio_pct": 60.924412124050484,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.03666944019496441,
+    "triton_tflops": 0.9150516566818989,
+    "cublas_tflops": 1.5262448452690478,
+    "ratio_pct": 59.954446989178386,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   },
   {
     "name": "medium_512",
     "M": 512,
     "N": 512,
     "K": 512,
-    "triton_ms": 0.033356479704380035,
-    "triton_tflops": 8.047475584324078,
-    "cublas_tflops": 13.676706629412802,
-    "ratio_pct": 58.840741432717195,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.03148031992837787,
+    "triton_tflops": 8.527087927020062,
+    "cublas_tflops": 14.055507531972614,
+    "ratio_pct": 60.66723601138671,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   },
   {
     "name": "large_1k",
     "M": 1024,
     "N": 1024,
     "K": 1024,
-    "triton_ms": 0.03270368013530969,
-    "triton_tflops": 65.66489273118204,
-    "cublas_tflops": 106.41390335787956,
-    "ratio_pct": 61.7070614451056,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.03368671994656324,
+    "triton_tflops": 63.74867162509506,
+    "cublas_tflops": 109.23733400766008,
+    "ratio_pct": 58.35795262142226,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   },
   {
     "name": "large_2k",
     "M": 2048,
     "N": 2048,
     "K": 2048,
-    "triton_ms": 0.04400544002652168,
-    "triton_tflops": 390.40330408344624,
-    "cublas_tflops": 615.204960345705,
-    "ratio_pct": 63.4590631167969,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.051329600028693675,
+    "triton_tflops": 334.69711773316584,
+    "cublas_tflops": 618.2228598589162,
+    "ratio_pct": 54.1385864976825,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   },
   {
     "name": "large_4k",
     "M": 4096,
     "N": 4096,
     "K": 4096,
-    "triton_ms": 0.14764224022626876,
-    "triton_tflops": 930.8918183669406,
-    "cublas_tflops": 1440.592238810348,
-    "ratio_pct": 64.61868898694595,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
-  },
-  {
-    "name": "tall_256_64",
-    "M": 256,
-    "N": 64,
-    "K": 256,
-    "triton_ms": 0.03187616011127829,
-    "triton_tflops": 0.26316243771883857,
-    "cublas_tflops": 0,
-    "ratio_pct": 0,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
-  },
-  {
-    "name": "wide_64_256",
-    "M": 64,
-    "N": 256,
-    "K": 256,
-    "triton_ms": 0.03201952004805207,
-    "triton_tflops": 0.2619841892511542,
-    "cublas_tflops": 0,
-    "ratio_pct": 0,
-    "has_warp_specialize": false,
-    "tc_gen5_mma_count": 2,
-    "partition_num_warps": []
+    "triton_ms": 0.20050623998045922,
+    "triton_tflops": 685.4597317539564,
+    "cublas_tflops": 1440.8532155259782,
+    "ratio_pct": 47.57318263704827,
+    "has_warp_specialize": true,
+    "tc_gen5_mma_count": 1,
+    "requested_registers": "24, 24",
+    "partition_num_warps": [
+      "1",
+      "2"
+    ]
   }
 ]
