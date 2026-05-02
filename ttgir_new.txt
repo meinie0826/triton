@@ -1,3 +1,3 @@
-tc_gen5_mma count: 2
+tc_gen5_mma count: 3
 Has warp_specialize: True
 Saved to ttgir_unknown.txt
