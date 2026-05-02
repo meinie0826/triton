@@ -65,22 +65,27 @@ static SmallVector<BlockArgument> getMMAv5AccUseArgsToPeel(scf::ForOp forOp) {
   SmallVector<BlockArgument> args;
   auto yieldOp = cast<scf::YieldOp>(forOp.getBody()->getTerminator());
 
-  for (BlockArgument arg : forOp.getRegionIterArgs()) {
-    unsigned argIdx = arg.getArgNumber() - 1;
-    if (!arg.getType().isInteger(1) ||
-        !isConstantIntValue(forOp.getInitArgs()[argIdx], 0) ||
-        !isConstantIntValue(yieldOp.getOperand(argIdx), 1)) {
-      continue;
+  forOp.walk([&](triton::nvidia_gpu::MMAv5OpInterface mma) {
+    auto arg = dyn_cast<BlockArgument>(mma.useAccumulator());
+    if (!arg || arg.getOwner() != forOp.getBody() ||
+        arg == forOp.getInductionVar() || !arg.getType().isInteger(1)) {
+      return;
     }
 
-    bool usedByMMAv5 = false;
-    forOp.walk([&](triton::nvidia_gpu::MMAv5OpInterface mma) {
-      if (mma.useAccumulator() == arg)
-        usedByMMAv5 = true;
-    });
-    if (usedByMMAv5)
+    auto regionIterArgs = forOp.getRegionIterArgs();
+    auto it = llvm::find(regionIterArgs, arg);
+    if (it == regionIterArgs.end())
+      return;
+
+    unsigned argIdx = std::distance(regionIterArgs.begin(), it);
+    if (!matchPattern(forOp.getInitArgs()[argIdx], m_Zero()) ||
+        !matchPattern(yieldOp.getOperand(argIdx), m_One())) {
+      return;
+    }
+
+    if (!llvm::is_contained(args, arg))
       args.push_back(arg);
-  }
+  });
   return args;
 }
 
