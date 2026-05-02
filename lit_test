@@ -1,0 +1,8 @@
+lit: /usr/local/lib/python3.12/dist-packages/lit/TestingConfig.py:152: fatal: unable to parse config file '/workspace/triton/test/lit.cfg.py', traceback: Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/lit/TestingConfig.py", line 140, in load_from_path
+    exec(compile(data, path, "exec"), cfg_globals, None)
+  File "/workspace/triton/test/lit.cfg.py", line 17, in <module>
+    config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'use_lit_shell'
+
