@@ -7,6 +7,7 @@
 #include "triton/Dialect/Triton/IR/Utility.h"
 #include "triton/Dialect/TritonGPU/Transforms/Passes.h"
 #include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
+#include "triton/Dialect/Triton/IR/OpInterfaces.h.inc"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
@@ -157,13 +158,22 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
   // account for multiple simultaneously-live values (accumulator + buffers).
   SmallVector<unsigned> maxPerThreadRegs;
   SmallVector<unsigned> sumPerThreadRegs;
+  SmallVector<bool> hasMMAOp;
   for (Region *partition : wsOp.getPartitionRegions()) {
     unsigned &maxRegs = maxPerThreadRegs.emplace_back(0);
     unsigned &sumRegs = sumPerThreadRegs.emplace_back(0);
+    bool &hasDot = hasMMAOp.emplace_back(false);
     // Track which tensor types we've already counted to avoid duplicates
     // (same tensor appearing as both operand and result).
     DenseSet<RankedTensorType> seen;
     partition->walk([&](Operation *op) {
+      // Detect DotOpInterface (covers tc_gen5_mma, warp_group_dot, tl.dot).
+      // On Blackwell, MMA partitions use MemDescType for operands/results
+      // rather than RankedTensorType, so the tensor walk finds nothing.
+      // MMA ops need ~40 registers per thread for fragments + pipeline
+      // management, which is much higher than the default fallback of 24.
+      if (isa<DotOpInterface>(op))
+        hasDot = true;
       for (Type type :
            llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes())) {
         if (auto tensor = dyn_cast<RankedTensorType>(type)) {
@@ -259,20 +269,34 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
   } while (changed);
 
   SmallVector<int32_t> estRegUsage(partitionNumWarps.size());
-  for (auto [partition, newNumWarps, prevNumWarps, maxRegs, sumRegs, estRegs] :
+  for (auto [partition, newNumWarps, prevNumWarps, maxRegs, sumRegs, hasDot, estRegs] :
        llvm::zip(wsOp.getPartitionRegions(), partitionNumWarps,
                  wsOp.getPartitionNumWarps(), maxPerThreadRegs,
-                 sumPerThreadRegs, estRegUsage)) {
+                 sumPerThreadRegs, hasMMAOp, estRegUsage)) {
     // Estimate register usage based on the sum of per-thread register counts
     // of all distinct tensors in the partition. This accounts for multiple
     // simultaneously-live values (e.g., accumulator + input buffers in
     // pipelined matmul) without relying on an arbitrary multiplier on the
     // max tensor.
-    estRegs = sumRegs ? std::max<int32_t>(sumRegs, 40) : 24;
+    // On Blackwell, MMA partitions use MemDescType (TMEM/shared) for
+    // operands/results rather than RankedTensorType, so sumRegs=0 and we
+    // fall through to the default. MMA ops need ~40 regs/thread for
+    // fragments + pipeline management, so bump the estimate for partitions
+    // containing DotOpInterface ops.
+    if (sumRegs) {
+      estRegs = std::max<int32_t>(sumRegs, 40);
+    } else if (hasDot) {
+      // MMA partition with no RankedTensorType (Blackwell TMEM path).
+      // tc_gen5_mma needs ~40 regs/thread for accumulator fragment,
+      // A/B fragments, and pipeline management.
+      estRegs = 40;
+    } else {
+      estRegs = 24;
+    }
 
     // Layouts need to be reassigned if the number of warps changed and there
-    // are tensor computations.
-    if (newNumWarps == prevNumWarps || !maxRegs)
+    // are tensor computations or MMA ops.
+    if (newNumWarps == prevNumWarps || (!maxRegs && !hasDot))
       continue;
     // We need to reassign layouts.
     if (failed(relayoutWarps(axisInfo, partition, prevNumWarps, newNumWarps,
