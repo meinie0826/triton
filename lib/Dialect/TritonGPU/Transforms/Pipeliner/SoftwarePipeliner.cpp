@@ -61,6 +61,84 @@ static bool hasMMAv5WaitsInLastStage(scf::ForOp forOp,
   return hasMMAv5 && hasWaitInLastStage;
 }
 
+static SmallVector<BlockArgument> getMMAv5AccUseArgsToPeel(scf::ForOp forOp) {
+  SmallVector<BlockArgument> args;
+  auto yieldOp = cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+
+  for (BlockArgument arg : forOp.getRegionIterArgs()) {
+    unsigned argIdx = arg.getArgNumber() - 1;
+    if (!arg.getType().isInteger(1) ||
+        !isConstantIntValue(forOp.getInitArgs()[argIdx], 0) ||
+        !isConstantIntValue(yieldOp.getOperand(argIdx), 1)) {
+      continue;
+    }
+
+    bool usedByMMAv5 = false;
+    forOp.walk([&](triton::nvidia_gpu::MMAv5OpInterface mma) {
+      if (mma.useAccumulator() == arg)
+        usedByMMAv5 = true;
+    });
+    if (usedByMMAv5)
+      args.push_back(arg);
+  }
+  return args;
+}
+
+static void peelPrologueForMMAv5AccUse(
+    scf::ForOp forOp, ArrayRef<BlockArgument> accUseArgs,
+    function_ref<Operation *(RewriterBase &, Operation *, bool)>
+        processPeeledOp) {
+  if (accUseArgs.empty())
+    return;
+
+  IRRewriter rewriter(forOp);
+  Location loc = forOp.getLoc();
+  Value lowerBound = forOp.getLowerBound();
+  Value upperBound = forOp.getUpperBound();
+  Value step = forOp.getStep();
+
+  rewriter.setInsertionPoint(forOp);
+  auto cond = arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::slt,
+                                    lowerBound, upperBound);
+  auto ifOp = scf::IfOp::create(rewriter, loc, forOp.getResultTypes(), cond);
+
+  IRMapping thenMap;
+  thenMap.map(forOp.getInductionVar(), lowerBound);
+  thenMap.map(forOp.getRegionIterArgs(), forOp.getInitArgs());
+  forOp.getBodyRegion().cloneInto(&ifOp.getThenRegion(), thenMap);
+
+  auto newElseBlock = rewriter.createBlock(&ifOp.getElseRegion());
+  rewriter.setInsertionPointToStart(newElseBlock);
+  scf::YieldOp::create(rewriter, loc, forOp.getInitArgs());
+
+  if (processPeeledOp) {
+    for (auto &op : llvm::make_early_inc_range(
+             ifOp.getThenRegion().front().without_terminator())) {
+      Operation *newOp = processPeeledOp(rewriter, &op, /*isEpilogue=*/false);
+      if (newOp && newOp != &op)
+        op.replaceAllUsesWith(newOp);
+    }
+  }
+
+  rewriter.setInsertionPoint(forOp);
+  Value newLowerBound = arith::AddIOp::create(rewriter, loc, lowerBound, step);
+  forOp.getLowerBoundMutable().assign(newLowerBound);
+  for (auto [i, result] : llvm::enumerate(ifOp.getResults()))
+    forOp.getInitArgsMutable()[i].assign(result);
+
+  rewriter.setInsertionPointToStart(forOp.getBody());
+  Value trueVal = arith::ConstantIntOp::create(rewriter, loc, 1, 1);
+  for (BlockArgument arg : accUseArgs) {
+    SmallVector<OpOperand *> uses = llvm::to_vector(
+        llvm::map_range(arg.getUses(), [](OpOperand &use) { return &use; }));
+    for (OpOperand *use : uses) {
+      if (use->getOwner() == forOp.getBody()->getTerminator())
+        continue;
+      use->set(trueVal);
+    }
+  }
+}
+
 static void expandLoops(ModuleOp moduleOp) {
   DenseSet<MaskOp> peeledMaskOps;
   auto processPeeledEpilogueOp = [&](RewriterBase &rewriter, Operation *op,
@@ -138,6 +216,8 @@ static void expandLoops(ModuleOp moduleOp) {
     }
     forOp = *newForOp;
     if (customEpiloguePeeling) {
+      SmallVector<BlockArgument> accUseArgs = getMMAv5AccUseArgsToPeel(forOp);
+      peelPrologueForMMAv5AccUse(forOp, accUseArgs, processPeeledEpilogueOp);
       mlir::triton::peelLoopEpilogue(forOp, processPeeledEpilogueOp);
     }
 
