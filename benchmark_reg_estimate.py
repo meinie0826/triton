@@ -145,36 +145,34 @@ def run_cublas(M, N, K):
 # ─── IR dump ───
 
 def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
-    import triton.compiler
-    from triton.backends.compiler import GPUTarget
+    """Get ttgir info by running the kernel and inspecting kernel.asm."""
+    def alloc_fn(size, align, stream):
+        return torch.empty(size, dtype=torch.int8, device="cuda")
+    triton.set_allocator(alloc_fn)
 
-    major, minor = torch.cuda.get_device_capability(0)
-    target = GPUTarget("cuda", major * 10 + minor, 32)
+    a = torch.randn((M, K), device='cuda', dtype=torch.float16)
+    b = torch.randn((N, K), device='cuda', dtype=torch.float16)
+    c = torch.randn((M, N), device='cuda', dtype=torch.float16)
 
-    sig = {
-        "a_ptr": "*fp16", "b_ptr": "*fp16", "c_ptr": "*fp16",
-        "a_stride0": "i32", "a_stride1": "i32",
-        "b_stride0": "i32", "b_stride1": "i32",
-        "c_stride0": "i32", "c_stride1": "i32",
-        "M": "i32", "N": "i32", "K": "i32",
-    }
-    src = triton.compiler.ASTSource(
-        fn=matmul_tma_ws_kernel,
-        signature=sig,
-        constexprs={
-            "num_stages": num_stages,
-            "BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "BLOCK_K": BLOCK_K,
-            "GROUP_M": 8,
-        },
+    grid = lambda META: (
+        triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
     )
-    compiled = triton.compile(src, target=target)
+
+    kernel = matmul_tma_ws_kernel[grid](
+        a, b, c,
+        a.stride(0), a.stride(1),
+        b.stride(0), b.stride(1),
+        c.stride(0), c.stride(1),
+        M, N, K,
+        num_stages=num_stages,
+        BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
+    )
 
     info = {}
     try:
-        ttgir = compiled.asm["ttgir"]
+        ttgir = kernel.asm["ttgir"]
         info["has_warp_specialize"] = "ttg.warp_specialize" in ttgir
         info["tc_gen5_mma_count"] = ttgir.count("ttng.tc_gen5_mma")
-
         import re
         req = re.search(r'requestedRegisters\s*=\s*array<i32:\s*(.*?)>', ttgir)
         if req:
