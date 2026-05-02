@@ -7,7 +7,7 @@
 #include "triton/Dialect/Triton/IR/Utility.h"
 #include "triton/Dialect/TritonGPU/Transforms/Passes.h"
 #include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
-#include "triton/Dialect/Triton/IR/OpInterfaces.h.inc"
+#include "triton/Dialect/Triton/IR/Dialect.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;

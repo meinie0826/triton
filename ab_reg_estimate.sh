@@ -3,13 +3,7 @@
 # A/B benchmark for register estimation optimization.
 #
 # BEFORE = origin/main (no changes, requestedRegisters=24,24 on Blackwell)
-# AFTER  = current reg-estimation branch (with DotOpInterface detection)
-#
-# This script:
-#   1. Saves benchmark script to /tmp (so it survives branch switches)
-#   2. Builds & benchmarks current branch (AFTER)
-#   3. Switches to origin/main, builds & benchmarks (BEFORE)
-#   4. Switches back, compares results
+# AFTER  = reg-estimation branch (with DotOpInterface detection)
 #
 # Usage on B300:
 #   cd /workspace/triton
@@ -37,14 +31,9 @@ echo "Benchmark script saved to $BENCH_SCRIPT"
 
 # ─── Helper: build Triton ───
 build_triton() {
-    echo ">>> Building Triton..."
+    echo ">>> Building Triton (make)..."
     cd "$TRITON_DIR"
-    BUILD_DIR=$(PYTHONPATH="./python" python3 -c 'from build_helpers import get_cmake_dir; print(get_cmake_dir())' 2>/dev/null || echo "")
-    if [ -z "$BUILD_DIR" ] || [ ! -f "$BUILD_DIR/build.ninja" ]; then
-        echo "ERROR: build directory not found. Run 'python setup.py develop' first."
-        exit 1
-    fi
-    ninja -C "$BUILD_DIR" 2>&1 | tail -5
+    make 2>&1 | tail -10
     echo ">>> Build done."
 }
 
