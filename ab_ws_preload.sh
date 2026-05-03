@@ -12,6 +12,7 @@ echo "=== WS Preload A/B Test ==="
 echo "Triton dir: $TRITON_DIR"
 
 cp "$TRITON_DIR/bench_ws_preload.py" "$BENCH_SCRIPT"
+# Ensure /tmp has latest version even if file already exists
 
 # Build current branch
 echo ""

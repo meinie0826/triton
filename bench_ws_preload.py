@@ -272,7 +272,7 @@ cublas_tflops = 0
 
 def run_cublas(M, N, K):
     a = torch.randn((M, K), device='cuda', dtype=torch.float16)
-    b = torch.randn((K, N), device='cuda', dtype=torch.float16)
+    b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # cuBLAS expects [N, K], same as Triton kernel
     c = torch.empty((M, N), device='cuda', dtype=torch.float16)
     for _ in range(5):
         cublas.matmul(a, b, c)
