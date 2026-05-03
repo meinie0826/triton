@@ -1,11 +1,7 @@
-"""Benchmark: WS first-load hoisting vs standard WS.
+"""Benchmark: WS preload vs WS standard on Blackwell.
 
-Kernel variant 'ws_preload' does the first TMA load + dot BEFORE the WS loop,
-so MMA partition doesn't need to wait_barrier on the first iteration.
-
-Kernel variant 'ws_standard' is the standard WS kernel (your original version).
-
-Both share the same tile/stage configs for fair comparison.
+Uses tl.make_tensor_descriptor (works on all Triton versions).
+Tests whether hoisting the first TMA load before WS helps.
 """
 import json
 import sys
@@ -14,7 +10,6 @@ import torch
 import triton
 import triton.language as tl
 from triton._internal_testing import is_hip
-from triton.tools.tensor_descriptor import TensorDescriptor
 
 if not is_hip() and torch.cuda.is_available():
     from triton._C.libtriton import nvidia
@@ -39,14 +34,24 @@ def alloc_fn(size, align, stream):
     return torch.empty(size, dtype=torch.int8, device="cuda")
 
 
-# ─── Kernel A: Standard WS (baseline) ───
+# ─── Kernel A: Standard WS ───
 @triton.jit
 def matmul_ws_standard(
-        a_desc, b_desc, c_desc,
+        a_ptr, b_ptr, c_ptr,
+        a_stride0, a_stride1,
+        b_stride0, b_stride1,
+        c_stride0, c_stride1,
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
 ):
+    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_K])
+    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
+                                       block_shape=[BLOCK_N, BLOCK_K])
+    c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_N])
+
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
     num_pid_n = tl.cdiv(N, BLOCK_N)
@@ -58,7 +63,6 @@ def matmul_ws_standard(
     off_bn = pid_n * BLOCK_N
 
     accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    # Standard WS: first TMA load happens inside the loop, MMA must wait
     for k in tl.range(k_tiles, warp_specialize=True, num_stages=3):
         off_k = k * BLOCK_K
         a = a_desc.load([off_am, off_k])
@@ -72,11 +76,21 @@ def matmul_ws_standard(
 # ─── Kernel B: WS with first load hoisted (preload) ───
 @triton.jit
 def matmul_ws_preload(
-        a_desc, b_desc, c_desc,
+        a_ptr, b_ptr, c_ptr,
+        a_stride0, a_stride1,
+        b_stride0, b_stride1,
+        c_stride0, c_stride1,
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
 ):
+    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_K])
+    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
+                                       block_shape=[BLOCK_N, BLOCK_K])
+    c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_N])
+
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
     num_pid_n = tl.cdiv(N, BLOCK_N)
@@ -88,8 +102,6 @@ def matmul_ws_preload(
     off_bn = pid_n * BLOCK_N
 
     # ─── Hoist first iteration: load + dot BEFORE WS loop ───
-    # This runs in the default warp group, before partitioning.
-    # MMA partition enters the loop with accumulator already initialized.
     accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     a0 = a_desc.load([off_am, 0])
     b0 = b_desc.load([off_bn, 0])
@@ -107,10 +119,13 @@ def matmul_ws_preload(
     c_desc.store([off_am, off_bn], c)
 
 
-# ─── Kernel C: WS persistent + epilogue subtiling ───
+# ─── Kernel C: WS persistent ───
 @triton.jit
 def matmul_ws_persistent(
-        a_desc, b_desc, c_desc,
+        a_ptr, b_ptr, c_ptr,
+        a_stride0, a_stride1,
+        b_stride0, b_stride1,
+        c_stride0, c_stride1,
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
@@ -125,6 +140,17 @@ def matmul_ws_persistent(
     num_tiles = num_pid_m * num_pid_n
     tile_id_c = start_pid - NUM_SMS
     num_pid_in_group = GROUP_M * num_pid_n
+
+    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_K])
+    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
+                                       block_shape=[BLOCK_N, BLOCK_K])
+    if EPILOGUE_SUBTILE:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N // 2])
+    else:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N])
 
     for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True, warp_specialize=True):
         pid_m, pid_n = _compute_pid(tile_id, num_pid_in_group, num_pid_m, GROUP_M)
@@ -159,7 +185,10 @@ def matmul_ws_persistent(
 # ─── Kernel D: WS persistent + preload ───
 @triton.jit
 def matmul_ws_persistent_preload(
-        a_desc, b_desc, c_desc,
+        a_ptr, b_ptr, c_ptr,
+        a_stride0, a_stride1,
+        b_stride0, b_stride1,
+        c_stride0, c_stride1,
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
@@ -175,6 +204,17 @@ def matmul_ws_persistent_preload(
     tile_id_c = start_pid - NUM_SMS
     num_pid_in_group = GROUP_M * num_pid_n
 
+    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
+                                       block_shape=[BLOCK_M, BLOCK_K])
+    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
+                                       block_shape=[BLOCK_N, BLOCK_K])
+    if EPILOGUE_SUBTILE:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N // 2])
+    else:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N])
+
     for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True, warp_specialize=True):
         pid_m, pid_n = _compute_pid(tile_id, num_pid_in_group, num_pid_m, GROUP_M)
         offs_am = pid_m * BLOCK_M
@@ -183,7 +223,7 @@ def matmul_ws_persistent_preload(
         # ─── Hoist first iteration ───
         accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         a0 = a_desc.load([offs_am, 0])
-        b0 = a_desc.load([offs_bn, 0])
+        b0 = b_desc.load([offs_bn, 0])
         accumulator = tl.dot(a0, b0.T, accumulator)
 
         if k_tiles > 1:
@@ -211,7 +251,7 @@ def matmul_ws_persistent_preload(
             c_desc.store([offs_am_c, offs_bn_c], c)
 
 
-# ─── Benchmark infrastructure ───
+# ─── Benchmark ───
 
 SHAPES = [
     ("1k",   1024, 1024, 1024),
@@ -227,7 +267,7 @@ TILE_CONFIGS = [
     ("128x256x64_s4_w8",  128, 256, 64,  4, 8),
 ]
 
-M_val = N_val = K_val = 0
+cublas_tflops = 0
 
 
 def run_cublas(M, N, K):
@@ -263,90 +303,12 @@ def bench(fn, M, N, K, n_warmup=10, n_repeat=100):
     return ms, 2.0 * M * N * K / (ms * 1e-3) / 1e12
 
 
-def make_descs(M, N, K, BM, BN, BK, BN_store=None):
-    if BN_store is None:
-        BN_store = BN
+def make_tensors(M, N, K):
     a = torch.randn((M, K), device='cuda', dtype=torch.float16)
-    b = torch.randn((K, N), device='cuda', dtype=torch.float16)
+    b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # [N, K] for b.T
     c = torch.empty((M, N), device='cuda', dtype=torch.float16)
-    a_desc = TensorDescriptor.from_outer_outer(a, [BM, BK])
-    b_desc = TensorDescriptor.from_outer_outer(b.T, [BN, BK])
-    c_desc = TensorDescriptor.from_outer_outer(c, [BM, BN_store])
-    return a, b, c, a_desc, b_desc, c_desc
+    return a, b, c
 
-
-def run_variant(variant, M, N, K, BM, BN, BK, stages, warps):
-    triton.set_allocator(alloc_fn)
-    os.system("rm -rf ~/.triton/cache")
-
-    if variant == "ws_standard":
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK)
-        grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
-        def fn():
-            matmul_ws_standard[grid](ad, bd, cd, M, N, K,
-                                     BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                     num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    elif variant == "ws_preload":
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK)
-        grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
-        def fn():
-            matmul_ws_preload[grid](ad, bd, cd, M, N, K,
-                                    BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                    num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    elif variant == "ws_persistent":
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK)
-        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
-        def fn():
-            matmul_ws_persistent[grid](ad, bd, cd, M, N, K,
-                                       BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                       NUM_SMS=NUM_SMS,
-                                       num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    elif variant == "ws_persistent_subtile":
-        BN_store = BN // 2
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK, BN_store)
-        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
-        def fn():
-            matmul_ws_persistent[grid](ad, bd, cd, M, N, K,
-                                       BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                       NUM_SMS=NUM_SMS, EPILOGUE_SUBTILE=True,
-                                       num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    elif variant == "ws_persistent_preload":
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK)
-        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
-        def fn():
-            matmul_ws_persistent_preload[grid](ad, bd, cd, M, N, K,
-                                               BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                               NUM_SMS=NUM_SMS,
-                                               num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    elif variant == "ws_persistent_preload_subtile":
-        BN_store = BN // 2
-        a, b, c, ad, bd, cd = make_descs(M, N, K, BM, BN, BK, BN_store)
-        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
-        def fn():
-            matmul_ws_persistent_preload[grid](ad, bd, cd, M, N, K,
-                                               BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
-                                               NUM_SMS=NUM_SMS, EPILOGUE_SUBTILE=True,
-                                               num_stages=stages, num_warps=warps)
-        ms, tf = bench(fn, M, N, K)
-
-    else:
-        return 0, 0, 0
-
-    return ms, tf, tf / cublas_tflops * 100 if cublas_tflops > 0 else 0
-
-
-# Global for ratio calculation
-cublas_tflops = 0
 
 VARIANTS = [
     "ws_standard",
@@ -356,6 +318,94 @@ VARIANTS = [
     "ws_persistent_preload",
     "ws_persistent_preload_subtile",
 ]
+
+
+def run_variant(variant, M, N, K, BM, BN, BK, stages, warps):
+    triton.set_allocator(alloc_fn)
+    os.system("rm -rf ~/.triton/cache")
+    a, b, c = make_tensors(M, N, K)
+
+    if variant == "ws_standard":
+        grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
+        def fn():
+            matmul_ws_standard[grid](a, b, c,
+                                     a.stride(0), a.stride(1),
+                                     b.stride(0), b.stride(1),
+                                     c.stride(0), c.stride(1),
+                                     M, N, K,
+                                     BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                     num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    elif variant == "ws_preload":
+        grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
+        def fn():
+            matmul_ws_preload[grid](a, b, c,
+                                    a.stride(0), a.stride(1),
+                                    b.stride(0), b.stride(1),
+                                    c.stride(0), c.stride(1),
+                                    M, N, K,
+                                    BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                    num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    elif variant == "ws_persistent":
+        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
+        def fn():
+            matmul_ws_persistent[grid](a, b, c,
+                                       a.stride(0), a.stride(1),
+                                       b.stride(0), b.stride(1),
+                                       c.stride(0), c.stride(1),
+                                       M, N, K,
+                                       BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                       NUM_SMS=NUM_SMS,
+                                       num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    elif variant == "ws_persistent_subtile":
+        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
+        def fn():
+            matmul_ws_persistent[grid](a, b, c,
+                                       a.stride(0), a.stride(1),
+                                       b.stride(0), b.stride(1),
+                                       c.stride(0), c.stride(1),
+                                       M, N, K,
+                                       BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                       NUM_SMS=NUM_SMS, EPILOGUE_SUBTILE=True,
+                                       num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    elif variant == "ws_persistent_preload":
+        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
+        def fn():
+            matmul_ws_persistent_preload[grid](a, b, c,
+                                               a.stride(0), a.stride(1),
+                                               b.stride(0), b.stride(1),
+                                               c.stride(0), c.stride(1),
+                                               M, N, K,
+                                               BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                               NUM_SMS=NUM_SMS,
+                                               num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    elif variant == "ws_persistent_preload_subtile":
+        grid = (min(NUM_SMS, triton.cdiv(M, BM) * triton.cdiv(N, BN)),)
+        def fn():
+            matmul_ws_persistent_preload[grid](a, b, c,
+                                               a.stride(0), a.stride(1),
+                                               b.stride(0), b.stride(1),
+                                               c.stride(0), c.stride(1),
+                                               M, N, K,
+                                               BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK,
+                                               NUM_SMS=NUM_SMS, EPILOGUE_SUBTILE=True,
+                                               num_stages=stages, num_warps=warps)
+        ms, tf = bench(fn, M, N, K)
+
+    else:
+        return 0, 0, 0
+
+    ratio = tf / cublas_tflops * 100 if cublas_tflops > 0 else 0
+    return ms, tf, ratio
 
 
 def main():
@@ -382,7 +432,8 @@ def main():
                         print(f"  {variant}/{cfg_name}: SKIP/FAIL")
                 except Exception as e:
                     tflops = 0; ratio = 0; ms = 0
-                    print(f"  {variant}/{cfg_name}: ERROR ({e})")
+                    err_str = str(e)[:80]
+                    print(f"  {variant}/{cfg_name}: ERROR ({err_str})")
 
                 results.append({
                     "label": label, "shape": shape_name, "M": M, "N": N, "K": K,
