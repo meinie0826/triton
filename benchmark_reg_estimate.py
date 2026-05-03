@@ -113,14 +113,16 @@ def matmul_tma_ws_persistent_kernel(
     num_pid_in_group = GROUP_M * num_pid_n
 
     # Persistent: each CTA processes multiple tiles
-    for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True, warp_specialize=True):
+    # Outer loop: persistent tile scheduling (no WS, just tile dispatch)
+    # Inner loop: WS + pipelined K reduction (same as non-persistent)
+    for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True):
         pid_m, pid_n = _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_M)
         off_am = pid_m * BLOCK_M
         off_bn = pid_n * BLOCK_N
 
         accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        for ki in range(k_tiles):  # inner K loop (NOT tl.range to avoid double WS)
-            off_k = ki * BLOCK_K
+        for k in tl.range(k_tiles, warp_specialize=True, num_stages=num_stages):
+            off_k = k * BLOCK_K
             a = a_desc.load((off_am, off_k))
             b = b_desc.load((off_bn, off_k))
             accumulator = tl.dot(a, b.T, accumulator)
