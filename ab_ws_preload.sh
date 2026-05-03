@@ -17,7 +17,7 @@ cp "$TRITON_DIR/bench_ws_preload.py" "$BENCH_SCRIPT"
 echo ""
 echo ">>> Building..."
 cd "$TRITON_DIR"
-make -j$(nproc)
+make
 
 echo ">>> Running benchmark..."
 python3 "$BENCH_SCRIPT" current

@@ -114,7 +114,7 @@ def matmul_ws_persistent(
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
-        NUM_SMS: tl.constexpr,
+        NUM_SMS: tl.constexpr = 128,
         EPILOGUE_SUBTILE: tl.constexpr = False,
 ):
     dtype = tl.float16
@@ -163,7 +163,7 @@ def matmul_ws_persistent_preload(
         M, N, K,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
         GROUP_M: tl.constexpr = 8,
-        NUM_SMS: tl.constexpr,
+        NUM_SMS: tl.constexpr = 128,
         EPILOGUE_SUBTILE: tl.constexpr = False,
 ):
     dtype = tl.float16
