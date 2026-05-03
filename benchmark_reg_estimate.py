@@ -40,10 +40,10 @@ def _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_SIZE_M: tl.constexpr):
     return pid_m, pid_n
 
 
-def matmul_ws_get_configs():
+def matmul_ws_get_configs(pre_hook=None):
     return [
         triton.Config({'BLOCK_M': BM, 'BLOCK_N': BN, 'BLOCK_K': BK, 'GROUP_M': 8},
-                      num_stages=s, num_warps=w)
+                      num_stages=s, num_warps=w, pre_hook=pre_hook)
         for BM in [128]
         for BN in [128, 256]
         for BK in [64, 128]
@@ -62,7 +62,7 @@ def matmul_ws_set_block_size_hook(nargs):
 
 
 @triton.autotune(
-    configs=matmul_ws_get_configs(),
+    configs=matmul_ws_get_configs(pre_hook=matmul_ws_set_block_size_hook),
     key=["M", "N", "K"],
 )
 @triton.jit
