@@ -81,8 +81,22 @@ def matmul_tma_ws_kernel(
 
 
 # ─── Persistent warp-specialized TMA matmul kernel ───
+# Matches tutorial 09-persistent-matmul pattern:
+# - WS on outer persistent tile loop (not inner K loop)
+# - tile_id_c = start_pid - NUM_SMS to decouple prologue/epilogue
+# - EPILOGUE_SUBTILE support to reduce SMEM pressure
+# - autotune configs
 
-NUM_SMS = None  # Set at runtime
+@triton.jit
+def _compute_pid_persistent(tile_id, num_pid_in_group, num_pid_m, GROUP_SIZE_M: tl.constexpr,
+                            NUM_SMS: tl.constexpr):
+    group_id = tile_id // num_pid_in_group
+    first_pid_m = group_id * GROUP_SIZE_M
+    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    pid_m = first_pid_m + (tile_id % group_size_m)
+    pid_n = (tile_id % num_pid_in_group) // group_size_m
+    return pid_m, pid_n
+
 
 @triton.jit
 def matmul_tma_ws_persistent_kernel(
@@ -97,13 +111,18 @@ def matmul_tma_ws_persistent_kernel(
     BLOCK_K: tl.constexpr,
     GROUP_M: tl.constexpr = 8,
     NUM_SMS: tl.constexpr = 128,
+    EPILOGUE_SUBTILE: tl.constexpr = False,
 ):
     a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
                                        block_shape=[BLOCK_M, BLOCK_K])
     b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
                                        block_shape=[BLOCK_N, BLOCK_K])
-    c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
-                                       block_shape=[BLOCK_M, BLOCK_N])
+    if EPILOGUE_SUBTILE:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N // 2])
+    else:
+        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
+                                           block_shape=[BLOCK_M, BLOCK_N])
 
     start_pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
@@ -112,23 +131,39 @@ def matmul_tma_ws_persistent_kernel(
     num_tiles = num_pid_m * num_pid_n
     num_pid_in_group = GROUP_M * num_pid_n
 
-    # Persistent: each CTA processes multiple tiles
-    # Outer loop: persistent tile scheduling (no WS, just tile dispatch)
-    # Inner loop: WS + pipelined K reduction (same as non-persistent)
-    for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True):
-        pid_m, pid_n = _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_M)
+    # Decouple prologue and epilogue tile IDs (tutorial pattern)
+    tile_id_c = start_pid - NUM_SMS
+
+    # Persistent: WS on outer tile loop, inner K loop uses range (not pipelined)
+    # This matches the tutorial 09-persistent-matmul pattern
+    for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True, warp_specialize=True):
+        pid_m, pid_n = _compute_pid_persistent(tile_id, num_pid_in_group, num_pid_m, GROUP_M, NUM_SMS)
         off_am = pid_m * BLOCK_M
         off_bn = pid_n * BLOCK_N
 
         accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        for k in tl.range(k_tiles, warp_specialize=True, num_stages=num_stages):
-            off_k = k * BLOCK_K
+        for ki in range(k_tiles):
+            off_k = ki * BLOCK_K
             a = a_desc.load((off_am, off_k))
             b = b_desc.load((off_bn, off_k))
             accumulator = tl.dot(a, b.T, accumulator)
 
-        c = accumulator.to(tl.float16)
-        c_desc.store((off_am, off_bn), c)
+        tile_id_c += NUM_SMS
+        pid_m_c, pid_n_c = _compute_pid_persistent(tile_id_c, num_pid_in_group, num_pid_m, GROUP_M, NUM_SMS)
+        off_cm = pid_m_c * BLOCK_M
+        off_cn = pid_n_c * BLOCK_N
+
+        if EPILOGUE_SUBTILE:
+            acc = tl.reshape(accumulator, (BLOCK_M, 2, BLOCK_N // 2))
+            acc = tl.permute(acc, (0, 2, 1))
+            acc0, acc1 = tl.split(acc)
+            c0 = acc0.to(tl.float16)
+            c_desc.store((off_cm, off_cn), c0)
+            c1 = acc1.to(tl.float16)
+            c_desc.store((off_cm, off_cn + BLOCK_N // 2), c1)
+        else:
+            c = accumulator.to(tl.float16)
+            c_desc.store((off_cm, off_cn), c)
 
 
 # ─── Timing ───
@@ -181,7 +216,8 @@ def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     return ms, tflops
 
 
-def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
+def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3,
+                              epilogue_subtile=False):
     num_sms = torch.cuda.get_device_properties("cuda").multi_processor_count
     def alloc_fn(size, align, stream):
         return torch.empty(size, dtype=torch.int8, device="cuda")
@@ -204,6 +240,7 @@ def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_
             num_stages=num_stages,
             BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
             NUM_SMS=num_sms,
+            EPILOGUE_SUBTILE=epilogue_subtile,
         )
 
     ms = benchmark_fn(fn)
@@ -338,13 +375,21 @@ def main():
         triton_ms, triton_tflops = run_triton_ws(M, N, K)
         print(f"  Triton WS (non-persistent): {triton_ms:.3f} ms, {triton_tflops:.3f} TFLOPS")
 
-        # Triton TMA warp-specialized persistent
+        # Triton TMA warp-specialized persistent (no subtile)
         persist_ms = 0; persist_tflops = 0
         try:
             persist_ms, persist_tflops = run_triton_ws_persistent(M, N, K)
             print(f"  Triton WS (persistent):     {persist_ms:.3f} ms, {persist_tflops:.3f} TFLOPS")
         except Exception as e:
             print(f"  Triton WS (persistent):     ERROR ({str(e)[:80]})")
+
+        # Triton TMA warp-specialized persistent with epilogue subtiling
+        subtile_ms = 0; subtile_tflops = 0
+        try:
+            subtile_ms, subtile_tflops = run_triton_ws_persistent(M, N, K, epilogue_subtile=True)
+            print(f"  Triton WS (persist+subtile): {subtile_ms:.3f} ms, {subtile_tflops:.3f} TFLOPS")
+        except Exception as e:
+            print(f"  Triton WS (persist+subtile): ERROR ({str(e)[:80]})")
 
         # cuBLAS baseline
         cublas_tflops = 0
@@ -361,6 +406,8 @@ def main():
             "ratio_pct": triton_tflops / cublas_tflops * 100 if cublas_tflops > 0 else 0,
             "persist_ms": persist_ms, "persist_tflops": persist_tflops,
             "persist_ratio_pct": persist_tflops / cublas_tflops * 100 if cublas_tflops > 0 and persist_tflops > 0 else 0,
+            "subtile_ms": subtile_ms, "subtile_tflops": subtile_tflops,
+            "subtile_ratio_pct": subtile_tflops / cublas_tflops * 100 if cublas_tflops > 0 and subtile_tflops > 0 else 0,
         }
 
         if args.dump_ir:
