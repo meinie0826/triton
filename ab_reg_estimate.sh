@@ -80,20 +80,32 @@ python3 -c "
 import json
 b = json.load(open('$RESULTS_DIR/results_before.json'))
 a = json.load(open('$RESULTS_DIR/results_after.json'))
-print(f'{\"Shape\":<15} {\"Before TF\":>10} {\"After TF\":>10} {\"Delta%\":>8} {\"B/cuBL%\":>8} {\"A/cuBL%\":>8} {\"reqRegs_B\":>16} {\"reqRegs_A\":>16}')
-print('-'*110)
+print(f'{\"Shape\":<15} {\"WS_nop TF\":>10} {\"WS_nop TF\":>10} {\"WS_per TF\":>10} {\"WS_per TF\":>10} {\"nop_Delta%\":>9} {\"per_Delta%\":>9} {\"nop_B/cu%\":>8} {\"nop_A/cu%\":>8} {\"per_B/cu%\":>8} {\"per_A/cu%\":>8} {\"reqRegs_B\":>16} {\"reqRegs_A\":>16}')
+print('-'*150)
+nop_deltas = []
+per_deltas = []
 for bi, ai in zip(b, a):
     n = bi['name']
     bt, at = bi['triton_tflops'], ai['triton_tflops']
-    d = (at-bt)/bt*100 if bt else 0
+    pbt, pat = bi.get('persist_tflops', 0), ai.get('persist_tflops', 0)
+    nop_d = (at-bt)/bt*100 if bt else 0
+    per_d = (pat-pbt)/pbt*100 if pbt else 0
     bc = bi.get('ratio_pct', 0)
     ac = ai.get('ratio_pct', 0)
+    pbc = bi.get('persist_ratio_pct', 0)
+    pac = ai.get('persist_ratio_pct', 0)
     br = bi.get('requested_registers','N/A')
     ar = ai.get('requested_registers','N/A')
-    print(f'{n:<15} {bt:>10.2f} {at:>10.2f} {d:>7.1f}% {bc:>7.1f}% {ac:>7.1f}% {str(br):>16} {str(ar):>16}')
-ds = [ai['triton_tflops']-bi['triton_tflops'] for bi,ai in zip(b,a)]
-avg = sum(d/bi['triton_tflops'] for d,bi in zip(ds,b))/len(ds)*100
-print(f'Average delta: {avg:+.1f}%')
+    nop_deltas.append(nop_d)
+    if pbt and pat: per_deltas.append(per_d)
+    pbt_str = f'{pbt:.2f}' if pbt else 'ERR'
+    pat_str = f'{pat:.2f}' if pat else 'ERR'
+    per_d_str = f'{per_d:.1f}%' if pbt and pat else 'N/A'
+    print(f'{n:<15} {bt:>10.2f} {at:>10.2f} {pbt_str:>10} {pat_str:>10} {nop_d:>8.1f}% {per_d_str:>9} {bc:>7.1f}% {ac:>7.1f}% {pbc:>7.1f}% {pac:>7.1f}% {str(br):>16} {str(ar):>16}')
+avg_nop = sum(nop_deltas)/len(nop_deltas)
+avg_per = sum(per_deltas)/len(per_deltas) if per_deltas else 0
+print(f'Average delta (non-persistent): {avg_nop:+.1f}%')
+print(f'Average delta (persistent):     {avg_per:+.1f}%')
 "
 echo ""
 echo "DONE. Results in $RESULTS_DIR/"
