@@ -286,14 +286,35 @@ static LogicalResult optimizePartitionNumWarps(ModuleAxisInfoAnalysis &axisInfo,
     // max tensor.
     // On Blackwell, MMA partitions use MemDescType (TMEM/shared) for
     // operands/results rather than RankedTensorType, so sumRegs=0 and we
-    // fall through to the default. MMA ops need ~40 regs/thread for
+    // fall through to the default. MMA ops need regs/thread for
     // fragments + pipeline management, so bump the estimate for partitions
     // containing DotOpInterface ops.
-    if (sumRegs) {
+    //
+    // TRITON_REG_ESTIMATE_OVERRIDE env var: comma-separated int list to
+    // override estRegs for each partition (e.g. "64,24"). Useful for
+    // benchmark sweeps.
+    SmallVector<int32_t> regOverride;
+    const char *overrideStr = getenv("TRITON_REG_ESTIMATE_OVERRIDE");
+    if (overrideStr) {
+      StringRef s(overrideStr);
+      SmallVector<StringRef> parts;
+      s.split(parts, ',');
+      for (auto part : parts) {
+        int32_t val;
+        if (!part.getAsInteger(10, val))
+          regOverride.push_back(val);
+      }
+    }
+
+    if (regOverride.size() == estRegUsage.size()) {
+      // Use the override values directly.
+      for (unsigned i = 0; i < estRegUsage.size(); i++)
+        estRegUsage[i] = regOverride[i];
+    } else if (sumRegs) {
       estRegs = std::max<int32_t>(sumRegs, 40);
     } else if (hasDot) {
       // MMA partition with no RankedTensorType (Blackwell TMEM path).
-      // tc_gen5_mma needs ~40 regs/thread for accumulator fragment,
+      // tc_gen5_mma needs regs/thread for accumulator fragment,
       // A/B fragments, and pipeline management.
       estRegs = 40;
     } else {
