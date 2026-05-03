@@ -190,7 +190,7 @@ def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_
     c = torch.empty((M, N), device='cuda', dtype=torch.float16)
 
     num_tiles = triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N)
-    grid = min(num_sms, num_tiles)
+    grid = (min(num_sms, num_tiles),)
 
     def fn():
         matmul_tma_ws_persistent_kernel[grid](
