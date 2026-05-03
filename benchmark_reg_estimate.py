@@ -27,7 +27,7 @@ except ImportError:
 from triton.tools.tensor_descriptor import TensorDescriptor
 
 
-# ─── Warp-specialized TMA matmul kernel ───
+# ─── Warp-specialized TMA matmul kernel (non-persistent) ───
 
 @triton.jit
 def _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_SIZE_M: tl.constexpr):
@@ -40,26 +40,40 @@ def _compute_pid(tile_id, num_pid_n, num_pid_m, GROUP_SIZE_M: tl.constexpr):
     return pid_m, pid_n
 
 
+def matmul_ws_get_configs():
+    return [
+        triton.Config({'BLOCK_M': BM, 'BLOCK_N': BN, 'BLOCK_K': BK, 'GROUP_M': 8},
+                      num_stages=s, num_warps=w)
+        for BM in [128]
+        for BN in [128, 256]
+        for BK in [64, 128]
+        for s in [2, 3, 4]
+        for w in [4, 8]
+    ]
+
+
+def matmul_ws_set_block_size_hook(nargs):
+    BLOCK_M = nargs["BLOCK_M"]
+    BLOCK_N = nargs["BLOCK_N"]
+    BLOCK_K = nargs["BLOCK_K"]
+    nargs["a_desc"].block_shape = [BLOCK_M, BLOCK_K]
+    nargs["b_desc"].block_shape = [BLOCK_N, BLOCK_K]
+    nargs["c_desc"].block_shape = [BLOCK_M, BLOCK_N]
+
+
+@triton.autotune(
+    configs=matmul_ws_get_configs(),
+    key=["M", "N", "K"],
+)
 @triton.jit
 def matmul_tma_ws_kernel(
-    a_ptr, b_ptr, c_ptr,
-    a_stride0, a_stride1,
-    b_stride0, b_stride1,
-    c_stride0, c_stride1,
+    a_desc, b_desc, c_desc,
     M, N, K,
-    num_stages: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     GROUP_M: tl.constexpr = 8,
 ):
-    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
-                                       block_shape=[BLOCK_M, BLOCK_K])
-    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
-                                       block_shape=[BLOCK_N, BLOCK_K])
-    c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
-                                       block_shape=[BLOCK_M, BLOCK_N])
-
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
     num_pid_n = tl.cdiv(N, BLOCK_N)
@@ -70,7 +84,7 @@ def matmul_tma_ws_kernel(
     off_bn = pid_n * BLOCK_N
 
     accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    for k in tl.range(k_tiles, warp_specialize=True, num_stages=num_stages):
+    for k in tl.range(k_tiles, warp_specialize=True):
         off_k = k * BLOCK_K
         a = a_desc.load((off_am, off_k))
         b = b_desc.load((off_bn, off_k))
@@ -82,9 +96,9 @@ def matmul_tma_ws_kernel(
 
 # ─── Persistent warp-specialized TMA matmul kernel ───
 # Matches tutorial 09-persistent-matmul pattern:
-# - WS on outer persistent tile loop (not inner K loop)
-# - tile_id_c = start_pid - NUM_SMS to decouple prologue/epilogue
-# - EPILOGUE_SUBTILE support to reduce SMEM pressure
+# - WS on outer persistent tile loop
+# - tile_id_c decoupling
+# - EPILOGUE_SUBTILE support
 # - autotune configs
 
 @triton.jit
@@ -98,14 +112,42 @@ def _compute_pid_persistent(tile_id, num_pid_in_group, num_pid_m, GROUP_SIZE_M: 
     return pid_m, pid_n
 
 
+def matmul_ws_persistent_get_configs(pre_hook=None):
+    return [
+        triton.Config(
+            {'BLOCK_M': BM, 'BLOCK_N': BN, 'BLOCK_K': BK, 'GROUP_M': 8,
+             'EPILOGUE_SUBTILE': SUBTILE},
+            num_stages=s, num_warps=w, pre_hook=pre_hook)
+        for BM in [128]
+        for BN in [128, 256]
+        for BK in [64, 128]
+        for s in [2, 3, 4]
+        for w in [4, 8]
+        for SUBTILE in [True, False]
+    ]
+
+
+def matmul_ws_persistent_set_block_size_hook(nargs):
+    BLOCK_M = nargs["BLOCK_M"]
+    BLOCK_N = nargs["BLOCK_N"]
+    BLOCK_K = nargs["BLOCK_K"]
+    EPILOGUE_SUBTILE = nargs.get("EPILOGUE_SUBTILE", False)
+    nargs["a_desc"].block_shape = [BLOCK_M, BLOCK_K]
+    nargs["b_desc"].block_shape = [BLOCK_N, BLOCK_K]
+    if EPILOGUE_SUBTILE:
+        nargs["c_desc"].block_shape = [BLOCK_M, BLOCK_N // 2]
+    else:
+        nargs["c_desc"].block_shape = [BLOCK_M, BLOCK_N]
+
+
+@triton.autotune(
+    configs=matmul_ws_persistent_get_configs(pre_hook=matmul_ws_persistent_set_block_size_hook),
+    key=["M", "N", "K"],
+)
 @triton.jit
 def matmul_tma_ws_persistent_kernel(
-    a_ptr, b_ptr, c_ptr,
-    a_stride0, a_stride1,
-    b_stride0, b_stride1,
-    c_stride0, c_stride1,
+    a_desc, b_desc, c_desc,
     M, N, K,
-    num_stages: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -113,16 +155,9 @@ def matmul_tma_ws_persistent_kernel(
     NUM_SMS: tl.constexpr = 128,
     EPILOGUE_SUBTILE: tl.constexpr = False,
 ):
-    a_desc = tl.make_tensor_descriptor(a_ptr, shape=[M, K], strides=[a_stride0, a_stride1],
-                                       block_shape=[BLOCK_M, BLOCK_K])
-    b_desc = tl.make_tensor_descriptor(b_ptr, shape=[N, K], strides=[b_stride0, b_stride1],
-                                       block_shape=[BLOCK_N, BLOCK_K])
     if EPILOGUE_SUBTILE:
-        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
-                                           block_shape=[BLOCK_M, BLOCK_N // 2])
-    else:
-        c_desc = tl.make_tensor_descriptor(c_ptr, shape=[M, N], strides=[c_stride0, c_stride1],
-                                           block_shape=[BLOCK_M, BLOCK_N])
+        pass  # block_shape already set by pre_hook
+    # Note: c_desc block_shape was set by pre_hook
 
     start_pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_M)
@@ -131,11 +166,9 @@ def matmul_tma_ws_persistent_kernel(
     num_tiles = num_pid_m * num_pid_n
     num_pid_in_group = GROUP_M * num_pid_n
 
-    # Decouple prologue and epilogue tile IDs (tutorial pattern)
+    # Decouple prologue and epilogue tile IDs
     tile_id_c = start_pid - NUM_SMS
 
-    # Persistent: WS on outer tile loop, inner K loop uses range (not pipelined)
-    # This matches the tutorial 09-persistent-matmul pattern
     for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True, warp_specialize=True):
         pid_m, pid_n = _compute_pid_persistent(tile_id, num_pid_in_group, num_pid_m, GROUP_M, NUM_SMS)
         off_am = pid_m * BLOCK_M
@@ -196,19 +229,20 @@ def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # [N, K] for b.T
     c = torch.empty((M, N), device='cuda', dtype=torch.float16)
 
+    # Use host-side TensorDescriptor (same as tutorial)
+    dummy_block = [1, 1]
+    a_desc = TensorDescriptor.from_tensor(a, dummy_block)
+    b_desc = TensorDescriptor.from_tensor(b, dummy_block)
+    c_desc = TensorDescriptor.from_tensor(c, dummy_block)
+
     grid = lambda META: (
         triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
     )
 
     def fn():
         matmul_tma_ws_kernel[grid](
-            a, b, c,
-            a.stride(0), a.stride(1),
-            b.stride(0), b.stride(1),
-            c.stride(0), c.stride(1),
+            a_desc, b_desc, c_desc,
             M, N, K,
-            num_stages=num_stages,
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
         )
 
     ms = benchmark_fn(fn)
@@ -216,8 +250,7 @@ def run_triton_ws(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     return ms, tflops
 
 
-def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3,
-                              epilogue_subtile=False):
+def run_triton_ws_persistent(M, N, K):
     num_sms = torch.cuda.get_device_properties("cuda").multi_processor_count
     def alloc_fn(size, align, stream):
         return torch.empty(size, dtype=torch.int8, device="cuda")
@@ -227,20 +260,22 @@ def run_triton_ws_persistent(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_
     b = torch.randn((N, K), device='cuda', dtype=torch.float16)  # [N, K] for b.T
     c = torch.empty((M, N), device='cuda', dtype=torch.float16)
 
-    num_tiles = triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N)
-    grid = (min(num_sms, num_tiles),)
+    # Use host-side TensorDescriptor (same as tutorial)
+    dummy_block = [1, 1]
+    a_desc = TensorDescriptor.from_tensor(a, dummy_block)
+    b_desc = TensorDescriptor.from_tensor(b, dummy_block)
+    c_desc = TensorDescriptor.from_tensor(c, dummy_block)
+
+    num_tiles = triton.cdiv(M, 128) * triton.cdiv(N, 128)  # rough estimate for grid
+    grid = lambda META: (
+        min(num_sms, triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N'])),
+    )
 
     def fn():
         matmul_tma_ws_persistent_kernel[grid](
-            a, b, c,
-            a.stride(0), a.stride(1),
-            b.stride(0), b.stride(1),
-            c.stride(0), c.stride(1),
+            a_desc, b_desc, c_desc,
             M, N, K,
-            num_stages=num_stages,
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
             NUM_SMS=num_sms,
-            EPILOGUE_SUBTILE=epilogue_subtile,
         )
 
     ms = benchmark_fn(fn)
@@ -262,7 +297,7 @@ def run_cublas(M, N, K):
 
 # ─── IR dump ───
 
-def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
+def dump_ir_info(M, N, K):
     """Get ttgir info by running the kernel and inspecting kernel.asm."""
     def alloc_fn(size, align, stream):
         return torch.empty(size, dtype=torch.int8, device="cuda")
@@ -272,18 +307,18 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     b = torch.randn((N, K), device='cuda', dtype=torch.float16)
     c = torch.randn((M, N), device='cuda', dtype=torch.float16)
 
+    dummy_block = [1, 1]
+    a_desc = TensorDescriptor.from_tensor(a, dummy_block)
+    b_desc = TensorDescriptor.from_tensor(b, dummy_block)
+    c_desc = TensorDescriptor.from_tensor(c, dummy_block)
+
     grid = lambda META: (
         triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N']),
     )
 
     kernel = matmul_tma_ws_kernel[grid](
-        a, b, c,
-        a.stride(0), a.stride(1),
-        b.stride(0), b.stride(1),
-        c.stride(0), c.stride(1),
+        a_desc, b_desc, c_desc,
         M, N, K,
-        num_stages=num_stages,
-        BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
     )
 
     info = {}
@@ -310,17 +345,11 @@ def dump_ir_info(M, N, K, BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_stages=3):
     # Also dump persistent kernel IR
     try:
         num_sms = torch.cuda.get_device_properties("cuda").multi_processor_count
-        num_tiles = triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N)
-        p_grid = min(num_sms, num_tiles)
+        p_grid = lambda META: (min(num_sms, triton.cdiv(M, META['BLOCK_M']) * triton.cdiv(N, META['BLOCK_N'])),)
         triton.set_allocator(alloc_fn)
         p_kernel = matmul_tma_ws_persistent_kernel[p_grid](
-            a, b, c,
-            a.stride(0), a.stride(1),
-            b.stride(0), b.stride(1),
-            c.stride(0), c.stride(1),
+            a_desc, b_desc, c_desc,
             M, N, K,
-            num_stages=num_stages,
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
             NUM_SMS=num_sms,
         )
         p_ttgir = p_kernel.asm["ttgir"]
@@ -371,25 +400,17 @@ def main():
 
         os.system("rm -rf ~/.triton/cache")
 
-        # Triton TMA warp-specialized (non-persistent)
+        # Triton TMA warp-specialized (non-persistent, autotuned)
         triton_ms, triton_tflops = run_triton_ws(M, N, K)
-        print(f"  Triton WS (non-persistent): {triton_ms:.3f} ms, {triton_tflops:.3f} TFLOPS")
+        print(f"  Triton WS (nop, autotuned):    {triton_ms:.3f} ms, {triton_tflops:.3f} TFLOPS")
 
-        # Triton TMA warp-specialized persistent (no subtile)
+        # Triton TMA warp-specialized persistent (autotuned)
         persist_ms = 0; persist_tflops = 0
         try:
             persist_ms, persist_tflops = run_triton_ws_persistent(M, N, K)
-            print(f"  Triton WS (persistent):     {persist_ms:.3f} ms, {persist_tflops:.3f} TFLOPS")
+            print(f"  Triton WS (persist, autotuned): {persist_ms:.3f} ms, {persist_tflops:.3f} TFLOPS")
         except Exception as e:
-            print(f"  Triton WS (persistent):     ERROR ({str(e)[:80]})")
-
-        # Triton TMA warp-specialized persistent with epilogue subtiling
-        subtile_ms = 0; subtile_tflops = 0
-        try:
-            subtile_ms, subtile_tflops = run_triton_ws_persistent(M, N, K, epilogue_subtile=True)
-            print(f"  Triton WS (persist+subtile): {subtile_ms:.3f} ms, {subtile_tflops:.3f} TFLOPS")
-        except Exception as e:
-            print(f"  Triton WS (persist+subtile): ERROR ({str(e)[:80]})")
+            print(f"  Triton WS (persist, autotuned): ERROR ({str(e)[:80]})")
 
         # cuBLAS baseline
         cublas_tflops = 0
@@ -406,8 +427,6 @@ def main():
             "ratio_pct": triton_tflops / cublas_tflops * 100 if cublas_tflops > 0 else 0,
             "persist_ms": persist_ms, "persist_tflops": persist_tflops,
             "persist_ratio_pct": persist_tflops / cublas_tflops * 100 if cublas_tflops > 0 and persist_tflops > 0 else 0,
-            "subtile_ms": subtile_ms, "subtile_tflops": subtile_tflops,
-            "subtile_ratio_pct": subtile_tflops / cublas_tflops * 100 if cublas_tflops > 0 and subtile_tflops > 0 else 0,
         }
 
         if args.dump_ir:
