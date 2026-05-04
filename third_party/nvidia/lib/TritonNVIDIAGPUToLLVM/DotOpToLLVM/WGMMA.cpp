@@ -61,8 +61,7 @@ triton::nvgpu::WGMMAEltType getMmaOperandType(Value a, bool allowTF32) {
   if (!aTensorOrMem)
     llvm::report_fatal_error(
         "getMmaOperandType: WGMMA operand must be TensorOrMemDesc "
-        "(RankedTensorType or MemDescType), got: " +
-        llvm::Twine(aType));
+        "(RankedTensorType or MemDescType)");
   auto aTy = aTensorOrMem.getElementType();
   if (aTy.isF16()) {
     return triton::nvgpu::WGMMAEltType::f16;
