@@ -62,7 +62,7 @@ triton::nvgpu::WGMMAEltType getMmaOperandType(Value a, bool allowTF32) {
     llvm::report_fatal_error(
         "getMmaOperandType: WGMMA operand must be TensorOrMemDesc "
         "(RankedTensorType or MemDescType), got: " +
-        llvm::Twine(*aType));
+        llvm::Twine(aType));
   auto aTy = aTensorOrMem.getElementType();
   if (aTy.isF16()) {
     return triton::nvgpu::WGMMAEltType::f16;
@@ -242,13 +242,13 @@ LogicalResult convertDot(const LLVMTypeConverter *typeConverter,
       return mlir::emitError(loc, "WGMMA: shared-memory operand A must be "
                                 "MemDescType, got: ")
              << aType;
-    baseA = getOffsetedBase(loadedA, *aMemDescTy,
+    baseA = getOffsetedBase(loadedA, aMemDescTy,
                             typeConverter, rewriter, loc);
   }
   auto bMemDescTy = dyn_cast<MemDescType>(bTensorTy);
   if (!bMemDescTy)
     return mlir::emitError(loc, "WGMMA: operand B must be MemDescType");
-  auto baseB = getOffsetedBase(loadedB, *bMemDescTy,
+  auto baseB = getOffsetedBase(loadedB, bMemDescTy,
                                typeConverter, rewriter, loc);
   auto dShapePerCTA = getShapePerCTA(dTensorTy);
   auto instrMNK = mmaEncoding.getInstrShape();
@@ -275,7 +275,7 @@ LogicalResult convertDot(const LLVMTypeConverter *typeConverter,
       return mlir::emitError(loc, "WGMMA: shared-memory operand A must be "
                                 "MemDescType for smem loader");
     auto loader =
-        DotOpMmaSmemLoader::build(loc, rewriter, *aMemDescTy2,
+        DotOpMmaSmemLoader::build(loc, rewriter, aMemDescTy2,
                                   baseA, {M, K}, 0, 3, false, dTensorTy);
     if (failed(loader)) {
       return mlir::emitError(loc, "failed to find valid wgmma layout for "
