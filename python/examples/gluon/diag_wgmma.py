@@ -51,7 +51,7 @@ def test_step1():
 # ---------------------------------------------------------------------------
 
 @gluon.jit
-def step2_layout(ptr, M: gl.constexpr, N: gl.constexpr):
+def step2_layout(ptr, M: gl.constexpr, N: gl.constexpr, INSTR_SHAPE_N: gl.constexpr):
     BLOCKED: gl.constexpr = gl.BlockedLayout([M * N // 128], [32], [4], [0])
     acc_layout: gl.constexpr = gl.NVMMADistributedLayout(
         version=[3, 0],
@@ -66,7 +66,7 @@ def step2_layout(ptr, M: gl.constexpr, N: gl.constexpr):
 
 def test_step2():
     C = torch.randn(M * N, device="cuda", dtype=torch.float32)
-    step2_layout[(1,)](C, M=M, N=N, num_warps=4)
+    step2_layout[(1,)](C, M=M, N=N, INSTR_SHAPE_N=INSTR_SHAPE_N, num_warps=4)
     print("Step 2 PASSED: NVMMADistributedLayout declaration works")
 
 
