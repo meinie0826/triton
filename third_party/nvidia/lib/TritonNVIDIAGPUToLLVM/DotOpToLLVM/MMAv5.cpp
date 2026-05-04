@@ -62,7 +62,9 @@ private:
 enum class mxfpKind { mxf8f6f4 = 0, mxf4 = 1, mxf4nvf4 = 2 };
 
 bool isTransposed(Value operand) {
-  auto tensorTy = cast<MemDescType>(operand.getType());
+  auto tensorTy = dyn_cast<MemDescType>(operand.getType());
+  if (!tensorTy)
+    return false;
   auto enc = tensorTy.getEncoding();
   if (auto shared = dyn_cast<NVMMASharedEncodingAttr>(enc))
     return shared.getTransposed();

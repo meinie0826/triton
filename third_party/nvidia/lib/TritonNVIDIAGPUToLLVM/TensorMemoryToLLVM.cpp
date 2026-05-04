@@ -528,8 +528,11 @@ struct TensorMemoryLoadOpConversion
     auto llvmElemTy =
         getTypeConverter()->convertType(op.getSrc().getType().getElementType());
     auto tmemBase = adaptor.getSrc();
-    auto regTy = cast<RankedTensorType>(op.getType());
-    auto memTy = cast<MemDescType>(op.getSrc().getType());
+    auto regTy = dyn_cast<RankedTensorType>(op.getType());
+    auto memTy = dyn_cast<MemDescType>(op.getSrc().getType());
+    if (!regTy || !memTy)
+      return mlir::emitError(loc, "TensorMemoryToLLVM: expect RankedTensorType and "
+                                "MemDescType");
 
     // Extract reduction attributes
     auto redOp = op.getRedOp();

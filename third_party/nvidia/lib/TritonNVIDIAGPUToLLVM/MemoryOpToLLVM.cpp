@@ -48,8 +48,10 @@ prepareLocalAtomicScatterAdd(triton::gpu::LocalAtomicScatterAddOp op, Value dst,
                              const NVIDIA::TargetInfo &targetInfo,
                              const LLVMTypeConverter *typeConverter) {
   auto loc = op.getLoc();
-  auto valuesTy = cast<RankedTensorType>(op.getValues().getType());
-  auto memDescTy = cast<MemDescType>(op.getDst().getType());
+  auto valuesTy = dyn_cast<RankedTensorType>(op.getValues().getType());
+  auto memDescTy = dyn_cast<MemDescType>(op.getDst().getType());
+  if (!valuesTy || !memDescTy)
+    return mlir::emitError(loc, "LocalStore: expect RankedTensorType and MemDescType");
   if (isa<triton::gpu::PartitionedSharedEncodingAttr>(
           memDescTy.getEncoding())) {
     return failure();
