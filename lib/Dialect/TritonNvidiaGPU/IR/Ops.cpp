@@ -57,8 +57,12 @@ LogicalResult WarpGroupDotOp::inferReturnTypes(
   inferredReturnTypes.push_back(accTy);
 
   // verify encodings
-  auto aEnc = cast<TensorOrMemDesc>(operands[0].getType()).getEncoding();
-  auto bEnc = cast<MemDescType>(operands[1].getType()).getEncoding();
+  auto aType = dyn_cast<TensorOrMemDesc>(operands[0].getType());
+  auto bType = dyn_cast<TensorOrMemDesc>(operands[1].getType());
+  if (!aType || !bType)
+    return failure();
+  auto aEnc = aType.getEncoding();
+  auto bEnc = bType.getEncoding();
   auto retEnc = accTy.getEncoding();
   if (aEnc) {
     assert(bEnc);
