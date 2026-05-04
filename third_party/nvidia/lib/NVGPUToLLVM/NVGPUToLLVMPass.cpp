@@ -281,6 +281,35 @@ public:
   }
 };
 
+class WgmmaFenceAlignedOpPattern : public OpRewritePattern<NVVM::WgmmaFenceAlignedOp> {
+public:
+  using OpRewritePattern<NVVM::WgmmaFenceAlignedOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(NVVM::WgmmaFenceAlignedOp op,
+                                PatternRewriter &rewriter) const override {
+    PTXBuilder ptxBuilder;
+    ptxBuilder.create("wgmma.fence.sync.aligned")->o("void")();
+    ptxBuilder.launch(rewriter, op.getLoc(), LLVM::LLVMVoidType::get(rewriter.getContext()));
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+class WgmmaGroupSyncAlignedOpPattern
+    : public OpRewritePattern<NVVM::WgmmaGroupSyncAlignedOp> {
+public:
+  using OpRewritePattern<NVVM::WgmmaGroupSyncAlignedOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(NVVM::WgmmaGroupSyncAlignedOp op,
+                                PatternRewriter &rewriter) const override {
+    PTXBuilder ptxBuilder;
+    ptxBuilder.create("wgmma.commit_group.sync.aligned")->o("void")();
+    ptxBuilder.launch(rewriter, op.getLoc(), LLVM::LLVMVoidType::get(rewriter.getContext()));
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class WGMMAWaitGroupOpPattern : public OpRewritePattern<ttn::WGMMAWaitGroupOp> {
 public:
   using OpRewritePattern<ttn::WGMMAWaitGroupOp>::OpRewritePattern;
@@ -644,7 +673,8 @@ public:
     RewritePatternSet patterns(context);
 
     patterns.add<ClusterCTAIdOpPattern, WGMMAOpPattern, LoadAcquireOpPattern,
-                 WGMMAWaitGroupOpPattern, WarpIdOpPattern>(context);
+                 WGMMAWaitGroupOpPattern, WarpIdOpPattern,
+                 WgmmaFenceAlignedOpPattern, WgmmaGroupSyncAlignedOpPattern>(context);
 
     if (applyPatternsGreedily(mod, std::move(patterns)).failed())
       signalPassFailure();
