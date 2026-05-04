@@ -38,7 +38,12 @@ using ::mlir::triton::gpu::SharedEncodingTrait;
 namespace {
 
 triton::nvgpu::WGMMAEltType getMmaRetType(Value d) {
-  auto dTy = cast<RankedTensorType>(d.getType()).getElementType();
+  auto dType = d.getType();
+  auto dTensorTy = dyn_cast<RankedTensorType>(dType);
+  if (!dTensorTy)
+    llvm::report_fatal_error(
+        "getMmaRetType: expected RankedTensorType for WGMMA accumulator");
+  auto dTy = dTensorTy.getElementType();
   if (dTy.isF32()) {
     return triton::nvgpu::WGMMAEltType::f32;
   } else if (dTy.isF16()) {
@@ -51,7 +56,14 @@ triton::nvgpu::WGMMAEltType getMmaRetType(Value d) {
 }
 
 triton::nvgpu::WGMMAEltType getMmaOperandType(Value a, bool allowTF32) {
-  auto aTy = cast<triton::gpu::TensorOrMemDesc>(a.getType()).getElementType();
+  auto aType = a.getType();
+  auto aTensorOrMem = dyn_cast<triton::gpu::TensorOrMemDesc>(aType);
+  if (!aTensorOrMem)
+    llvm::report_fatal_error(
+        "getMmaOperandType: WGMMA operand must be TensorOrMemDesc "
+        "(RankedTensorType or MemDescType), got: " +
+        llvm::Twine(*aType));
+  auto aTy = aTensorOrMem.getElementType();
   if (aTy.isF16()) {
     return triton::nvgpu::WGMMAEltType::f16;
   } else if (aTy.isBF16()) {
@@ -151,7 +163,10 @@ SmallVector<Value> unpackAccumulator(ConversionPatternRewriter &rewriter,
 
 Value faddAccumulate(ConversionPatternRewriter &rewriter, Location loc, Value a,
                      Value b) {
-  int numEl = cast<LLVM::LLVMStructType>(a.getType()).getBody().size();
+  auto aStructTy = dyn_cast<LLVM::LLVMStructType>(a.getType());
+  if (!aStructTy)
+    llvm::report_fatal_error("faddAccumulate: expected LLVMStructType");
+  int numEl = aStructTy.getBody().size();
   Value newStruct = LLVM::UndefOp::create(rewriter, loc, a.getType());
   for (int i = 0; i < numEl; ++i) {
     Value lhs = LLVM::ExtractValueOp::create(rewriter, loc, a, i);
@@ -190,18 +205,50 @@ LogicalResult convertDot(const LLVMTypeConverter *typeConverter,
                          bool needsPartialAccumulator,
                          uint32_t maxNumImpreciseAcc, bool sync, Value thread) {
   auto tb = TritonLLVMOpBuilder(loc, rewriter);
-  auto aTensorTy = cast<triton::gpu::TensorOrMemDesc>(a.getType());
-  auto bTensorTy = cast<triton::gpu::MemDescType>(b.getType());
-  auto dTensorTy = cast<RankedTensorType>(d.getType());
+  auto aType = a.getType();
+  auto aTensorTy = dyn_cast<triton::gpu::TensorOrMemDesc>(aType);
+  if (!aTensorTy)
+    return mlir::emitError(loc,
+                           "WGMMA: operand A must be TensorOrMemDesc "
+                           "(RankedTensorType or MemDescType), got: ")
+           << aType;
+  auto bType = b.getType();
+  auto bTensorTy = dyn_cast<triton::gpu::MemDescType>(bType);
+  if (!bTensorTy)
+    return mlir::emitError(loc,
+                           "WGMMA: operand B must be MemDescType "
+                           "(shared memory descriptor), got: ")
+           << bType;
+  auto dType = d.getType();
+  auto dTensorTy = dyn_cast<RankedTensorType>(dType);
+  if (!dTensorTy)
+    return mlir::emitError(loc,
+                           "WGMMA: operand D must be RankedTensorType, got: ")
+           << dType;
+
+  auto mmaEncodingAttr = dyn_cast<NvidiaMmaEncodingAttr>(dTensorTy.getEncoding());
+  if (!mmaEncodingAttr)
+    return mlir::emitError(loc,
+                           "WGMMA: operand D must have "
+                           "NvidiaMmaEncodingAttr, got: ")
+           << dTensorTy.getEncoding();
+  auto mmaEncoding = mmaEncodingAttr;
   bool aInShared = isa<SharedEncodingTrait>(aTensorTy.getEncoding());
-  auto mmaEncoding = cast<NvidiaMmaEncodingAttr>(dTensorTy.getEncoding());
   std::optional<SharedMemoryObject> smemObjA;
   Value baseA;
   if (aInShared) {
-    baseA = getOffsetedBase(loadedA, cast<MemDescType>(aTensorTy),
+    auto aMemDescTy = dyn_cast<MemDescType>(aTensorTy);
+    if (!aMemDescTy)
+      return mlir::emitError(loc, "WGMMA: shared-memory operand A must be "
+                                "MemDescType, got: ")
+             << aType;
+    baseA = getOffsetedBase(loadedA, *aMemDescTy,
                             typeConverter, rewriter, loc);
   }
-  auto baseB = getOffsetedBase(loadedB, cast<MemDescType>(bTensorTy),
+  auto bMemDescTy = dyn_cast<MemDescType>(bTensorTy);
+  if (!bMemDescTy)
+    return mlir::emitError(loc, "WGMMA: operand B must be MemDescType");
+  auto baseB = getOffsetedBase(loadedB, *bMemDescTy,
                                typeConverter, rewriter, loc);
   auto dShapePerCTA = getShapePerCTA(dTensorTy);
   auto instrMNK = mmaEncoding.getInstrShape();
@@ -223,8 +270,12 @@ LogicalResult convertDot(const LLVMTypeConverter *typeConverter,
   SmallVector<Value> structA;
   bool transA = false;
   if (aInShared) {
+    auto aMemDescTy2 = dyn_cast<MemDescType>(aTensorTy);
+    if (!aMemDescTy2)
+      return mlir::emitError(loc, "WGMMA: shared-memory operand A must be "
+                                "MemDescType for smem loader");
     auto loader =
-        DotOpMmaSmemLoader::build(loc, rewriter, cast<MemDescType>(aTensorTy),
+        DotOpMmaSmemLoader::build(loc, rewriter, *aMemDescTy2,
                                   baseA, {M, K}, 0, 3, false, dTensorTy);
     if (failed(loader)) {
       return mlir::emitError(loc, "failed to find valid wgmma layout for "
@@ -286,7 +337,12 @@ LogicalResult convertDot(const LLVMTypeConverter *typeConverter,
           a = aLoader.smemLoad(m * mmaSizeM, k * mmaSizeK, rewriter, loc);
         } else {
           auto aDotOpEnc =
-              cast<DotOperandEncodingAttr>(aTensorTy.getEncoding());
+              dyn_cast<DotOperandEncodingAttr>(aTensorTy.getEncoding());
+          if (!aDotOpEnc)
+            return mlir::emitError(loc,
+                                   "WGMMA: register operand A must have "
+                                   "DotOperandEncodingAttr, got: ")
+                   << aTensorTy.getEncoding();
           assert(aDotOpEnc.getKWidth() ==
                  32 / aTensorTy.getElementTypeBitWidth());
 
