@@ -401,6 +401,10 @@ class GluonSemantic(TritonSemantic[TensorTy]):
         shape = list(mem_desc.shape)
         shape[dim] = length
         layout = mem_desc.layout
+        # NVMMASharedLayout rank must match shape length after slice
+        import dataclasses
+        if hasattr(layout, 'rank') and layout.rank != len(shape):
+            layout = dataclasses.replace(layout, rank=len(shape))
         ty = ttgl.shared_memory_descriptor_type(mem_desc.dtype, shape, layout, mem_desc.type.alloc_shape)
         builder = self.builder
         handle = builder.create_memdesc_subslice(ty.to_ir(builder), mem_desc.handle, offsets)
@@ -412,6 +416,10 @@ class GluonSemantic(TritonSemantic[TensorTy]):
         shape = mem_desc.shape[1:]
         index = self.to_tensor(index).handle
         layout = mem_desc.layout
+        # NVMMASharedLayout rank must match shape length after index
+        import dataclasses
+        if hasattr(layout, 'rank') and layout.rank != len(shape):
+            layout = dataclasses.replace(layout, rank=len(shape))
         ty = ttgl.shared_memory_descriptor_type(mem_desc.dtype, shape, layout, shape)
         builder = self.builder
         handle = builder.create_memdesc_index(ty.to_ir(builder), mem_desc.handle, index)
