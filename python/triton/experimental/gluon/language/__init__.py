@@ -57,6 +57,7 @@ from ._core import (
     gather,
     num_warps,
     num_ctas,
+    cluster_cta_id,
     histogram,
     inline_asm_elementwise,
     join,

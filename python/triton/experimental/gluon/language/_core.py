@@ -77,6 +77,7 @@ __all__ = [
     "tuple",
     "tuple_type",
     "num_ctas",
+    "cluster_cta_id",
 ]
 
 T = TypeVar("T")
