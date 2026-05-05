@@ -634,8 +634,7 @@ class GluonSemantic(TritonSemantic[TensorTy]):
     def cluster_cta_id(self):
         """Returns the CTA id within the current cluster (0..num_ctas-1)."""
         handle = self.builder.create_cluster_cta_id()
-        ret_ty = ttgl.distributed_type(ttgl.int32, [], AutoLayout())
-        return ttgl.tensor(handle, ret_ty)
+        return ttgl.tensor(handle, ttgl.int32)
 
     def num_warps(self, generator):
         if generator.caller_context is not None:
