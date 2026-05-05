@@ -9,6 +9,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "triton/Analysis/Utility.h"
 #include "triton/Conversion/MLIRTypes.h"
+#include "triton/Tools/Sys/GetEnv.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/OpInterfaces.h"
 #include "triton/Dialect/Triton/IR/Utility.h"
@@ -40,6 +41,16 @@ static bool isUnsupportedMMAv5Int8Dot(int computeCapability, DotOp op) {
 
 // Get the highest version supported for the hardware and the dot.
 static int getMMAVersionSafe(int computeCapability, DotOp op) {
+  // Allow user to force MMAv2 (mma.sync) on any architecture.
+  // This is useful on Blackwell (sm_100+) where tcgen05.mma may not
+  // be desirable (e.g., for small GEMMs or debugging).
+  if (triton::tools::getBoolEnv("TRITON_FORCE_MMA_V2")) {
+    if (supportMMA(op, 2))
+      return 2;
+    op.emitRemark() << "TRITON_FORCE_MMA_V2 is set but MMAv2 not supported for "
+                       "this dot op; falling back to default selection.";
+  }
+
   // List supported mma version in order of preference.
   SmallVector<int> versionsSupported;
   if (computeCapability < 75) {
