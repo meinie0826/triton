@@ -903,6 +903,10 @@ void init_gluon_ir(py::module &&m) {
            [](GluonOpBuilder &self, Value clcResult, int dim) -> Value {
              return self.create<ttng::CLCGetProgramIdOp>(clcResult, dim);
            })
+      .def("create_cluster_cta_id",
+           [](GluonOpBuilder &self) -> Value {
+             return self.create<ttng::ClusterCTAIdOp>();
+           })
       .def("create_tcgen05_mma",
            [](GluonOpBuilder &self, Value a, Value b, Value acc, Value useAcc,
               Value pred, std::vector<Value> &mbarriers,
