@@ -1090,11 +1090,16 @@ LogicalResult MemDescSubsliceOp::verify() {
     ll = triton::gpu::toLinearLayout(srcTy);
   }
 
-  // If any block basis is fully broadcasted, multiple CTAs can alias the same
-  // output tile region. Subslice on such layouts is unsupported.
+  // If any block basis is fully broadcasted, the output of this subslice
+  // would be broadcasted as well.  For shared-memory descriptors this is safe
+  // because each CTA owns independent physical memory, so there is no aliasing.
+  // For non-shared-memory layouts it could let multiple CTAs alias the same
+  // tensor region, which we do not allow.
   auto kBlock = mlir::StringAttr::get(ctx, "block");
   if (ll.getFreeVariableMasks()[kBlock] != 0) {
-    return emitError("We don't support splitting with broadcasted CTA outputs");
+    if (!isa<SharedEncodingTrait>(srcEnc)) {
+      return emitError("We don't support splitting with broadcasted CTA outputs");
+    }
   }
 
   auto llInv = ll.invert();
