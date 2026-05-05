@@ -630,6 +630,17 @@ def num_ctas(_semantic=None):
 
 
 @builtin
+def cluster_cta_id(_semantic=None):
+    """
+    Returns the linear index of the current CTA within its cluster.
+
+    Returns 0 for single-CTA kernels. For multi-CTA clusters (num_ctas>1),
+    returns a value in range [0, num_ctas).
+    """
+    return _semantic.cluster_cta_id()
+
+
+@builtin
 def barrier(*, cluster: bool = False, _semantic=None):
     """
     Insert a barrier to synchronize threads within a CTA, or across a cluster.

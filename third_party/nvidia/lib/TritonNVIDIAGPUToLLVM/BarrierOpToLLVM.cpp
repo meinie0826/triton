@@ -540,6 +540,28 @@ struct CLCGetProgramIdOpConversion
     return success();
   }
 };
+
+struct ClusterCTAIdOpConversion
+    : public ConvertOpToLLVMPattern<triton::nvidia_gpu::ClusterCTAIdOp> {
+  ClusterCTAIdOpConversion(LLVMTypeConverter &typeConverter,
+                           PatternBenefit benefit,
+                           TargetInfo &targetInfo)
+      : ConvertOpToLLVMPattern<triton::nvidia_gpu::ClusterCTAIdOp>(typeConverter,
+                                                                    benefit),
+        targetInfo(targetInfo) {}
+
+  LogicalResult
+  matchAndRewrite(triton::nvidia_gpu::ClusterCTAIdOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value ctaId = targetInfo.getClusterCTAId(rewriter, loc);
+    rewriter.replaceOp(op, ctaId);
+    return success();
+  }
+
+private:
+  TargetInfo &targetInfo;
+};
 } // namespace
 
 void mlir::triton::NVIDIA::populateBarrierOpToLLVMPatterns(
@@ -557,4 +579,5 @@ void mlir::triton::NVIDIA::populateBarrierOpToLLVMPatterns(
   patterns.add<CLCLoadResultOpConversion>(typeConverter, benefit, targetInfo);
   patterns.add<CLCIsCanceledOpConversion>(typeConverter, benefit, targetInfo);
   patterns.add<CLCGetProgramIdOpConversion>(typeConverter, benefit, targetInfo);
+  patterns.add<ClusterCTAIdOpConversion>(typeConverter, benefit, targetInfo);
 }

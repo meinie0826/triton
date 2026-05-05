@@ -196,6 +196,21 @@ def TTNG_CLCGetProgramIdOp : TTNG_Op<"clc_get_program_id", [Pure]> {
   ];
 }
 
+def TTNG_ClusterCTAIdOp : TTNG_Op<"cluster_cta_id", [Pure]> {
+  let summary = "Get the CTA id within the current cluster";
+
+  let description = [{
+    Returns the linear index of the current CTA within its cluster (0..num_ctas-1).
+    For single-CTA kernels returns 0.
+
+    Lowers to nvgpu::ClusterCTAIdOp → NVVM::ClusterId → PTX %cluster_ctaid.
+  }];
+
+  let results = (outs I32:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 //
 // WarpGroupDot Op
 //

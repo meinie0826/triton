@@ -631,6 +631,11 @@ class GluonSemantic(TritonSemantic[TensorTy]):
     def num_ctas(self):
         return ttgl.constexpr(self.builder.options.num_ctas)
 
+    def cluster_cta_id(self):
+        """Returns the CTA id within the current cluster (0..num_ctas-1)."""
+        handle = self.builder.create_cluster_cta_id()
+        return base_value(handle, int32)
+
     def num_warps(self, generator):
         if generator.caller_context is not None:
             assert isinstance(generator.caller_context, GluonCallerContext)
