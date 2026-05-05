@@ -545,7 +545,7 @@ struct ClusterCTAIdOpConversion
     : public ConvertOpToLLVMPattern<triton::nvidia_gpu::ClusterCTAIdOp> {
   ClusterCTAIdOpConversion(LLVMTypeConverter &typeConverter,
                            PatternBenefit benefit,
-                           TargetInfo &targetInfo)
+                           NVIDIA::TargetInfo &targetInfo)
       : ConvertOpToLLVMPattern<triton::nvidia_gpu::ClusterCTAIdOp>(typeConverter,
                                                                     benefit),
         targetInfo(targetInfo) {}
@@ -560,7 +560,7 @@ struct ClusterCTAIdOpConversion
   }
 
 private:
-  TargetInfo &targetInfo;
+  NVIDIA::TargetInfo &targetInfo;
 };
 } // namespace
 
