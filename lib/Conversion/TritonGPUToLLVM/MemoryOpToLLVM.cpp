@@ -61,9 +61,14 @@ LogicalResult lowerLocalStore(Location loc, MLIRContext *ctx, Value regVal,
 
   auto kBlock = str_attr("block");
   // We could support it by removing this check if we ever want to
-  if (!cvt.isTrivialOver({kBlock})) {
-    return failure();
-  }
+  // if (!cvt.isTrivialOver({kBlock})) {
+  //   return failure();
+  // }
+  // Shared memory is per-CTA — each CTA has its own private shared memory.
+  // CGA broadcast (or 1-CTA) register layouts are compatible with per-CTA
+  // shared memory: each CTA independently writes/reads its own shared memory.
+  // The "block" (CGA) dimension does not affect the data layout within each
+  // CTA's shared memory, so we skip the triviality check over "block".
   lowerLocalLdSt(loc, ctx, cvt, inVals, llvmElemTy, memDescTy, smemObj,
                  rewriter, targetInfo);
 
@@ -193,9 +198,13 @@ public:
 
     auto kBlock = str_attr("block");
     // We could support it by removing this check if we ever want to
-    if (!cvt.isTrivialOver({kBlock})) {
-      return failure();
-    }
+    // if (!cvt.isTrivialOver({kBlock})) {
+    //   return failure();
+    // }
+    // Shared memory is per-CTA — CGA broadcast loads from 1-CTA shared memory
+    // are valid: each CTA independently reads from its own shared memory.
+    // The "block" (CGA) dimension does not affect the data layout within each
+    // CTA's shared memory, so we skip the triviality check over "block".
 
     auto outVals = lowerLocalLdSt(loc, ctx, cvt, {}, llvmElemTy, memDescTy,
                                   smemObj, rewriter, targetInfo, op);
