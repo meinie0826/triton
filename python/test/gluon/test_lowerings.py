@@ -46,6 +46,14 @@ def _make_cga_broadcast(rank: ttgl.constexpr, num_ctas: ttgl.constexpr):
     return [[0] * rank for _ in range(n)]
 
 
+@gluon.constexpr_function
+def _make_cga_split(rank: ttgl.constexpr, num_ctas: ttgl.constexpr, dim: ttgl.constexpr):
+    if num_ctas == 1:
+        return []
+    n = num_ctas.bit_length() - 1
+    return [[0] * dim + [1 << i] + [0] * (rank - dim - 1) for i in range(n)]
+
+
 @gluon.jit
 def _combine(a, b):
     return a + b
@@ -65,7 +73,7 @@ def convert_1d_to_2d_slice_cga_kernel(out, HEAD: ttgl.constexpr, NUM_CTAS: ttgl.
         [1, 32],
         [ttgl.num_warps(), 1],
         [1, 0],
-        _make_cga_broadcast(2, NUM_CTAS),
+        _make_cga_split(2, NUM_CTAS, 1),
     )
 
     d = ttgl.arange(0, HEAD, layout=layout_d)
