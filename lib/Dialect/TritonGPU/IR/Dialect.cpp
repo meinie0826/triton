@@ -3749,9 +3749,13 @@ struct TritonGPUVerifyTensorLayoutInterface
     int moduleCTAsPerCGA = lookupNumCTAs(op);
     int layoutCTAsPerCGA = getNumCTAs(layout);
     if (layoutCTAsPerCGA != moduleCTAsPerCGA) {
-      // Shared memory is always per-CTA; in CGA kernels each CTA has its own
-      // physical shared memory, so a 1-CTA-per-CGA layout is valid.
-      if (isa<SharedEncodingTrait>(layout) && layoutCTAsPerCGA == 1) {
+      // Per-CTA layouts are valid in CGA kernels:
+      // - Shared memory is physically per-CTA.
+      // - MMA layouts (DotOperand / NVMMADistributed / NVMMAShared) are
+      //   per-CTA because each CTA computes its own MMA independently.
+      if (isa<SharedEncodingTrait, DotOperandEncodingAttr,
+              NvidiaMmaEncodingAttr>(layout) &&
+          layoutCTAsPerCGA == 1) {
         return success();
       }
       return makeErr() << layout << ".\nLayout has " << layoutCTAsPerCGA
