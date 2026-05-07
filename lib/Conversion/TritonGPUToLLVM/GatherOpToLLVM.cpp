@@ -35,6 +35,10 @@ LogicalResult
 GatherOpConversion::matchAndRewrite(GatherOp op, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
   GatherLoweringHelper helper(op);
+  llvm::errs() << "\n=== GatherOpConversion: matching GatherOp ===\n";
+  llvm::errs() << "isWarpLocal: " << helper.isWarpLocal() << "\n";
+  llvm::errs() << "src type: " << op.getSrc().getType() << "\n";
+  llvm::errs() << "indices type: " << op.getIndices().getType() << "\n";
   // Specialize the lowering based on the source layout. Given that the cost of
   // a warp shuffle is approximately half the cost of a roundtrip to shared
   // memory with zero bank conflicts, we will need a more precise heuristic to

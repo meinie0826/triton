@@ -83,6 +83,9 @@ struct TMAGatherLowering : public OpRewritePattern<DescriptorGatherOp> {
 
   LogicalResult matchAndRewrite(DescriptorGatherOp op,
                                 PatternRewriter &rewriter) const override {
+    llvm::errs() << "\n=== TMAGatherLowering: matching DescriptorGatherOp ===\n";
+    llvm::errs() << "xOffsets type: " << op.getXOffsets().getType() << "\n";
+    llvm::errs() << "result type: " << op.getType() << "\n";
     Value xOffsets =
         sextI16ToI32Indices(op.getXOffsets(), rewriter, op.getLoc());
 

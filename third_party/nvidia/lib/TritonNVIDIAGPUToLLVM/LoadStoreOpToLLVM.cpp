@@ -1492,13 +1492,38 @@ static LogicalResult iterateGatherScatterIndices(
   // consecutive shared memory. Thus, the layout of the x offsets must be such
   // that 4 consecutive elements are broadcasted to a warp.
   LinearLayout xCoordsLayout = triton::gpu::toLinearLayout(xCoords.getType());
-  if (xCoordsLayout.getInDimSize(kRegister) < 4)
+  llvm::errs() << "\n=== gather4 debug: xCoords layout ===\n";
+  llvm::errs() << "xCoords type: " << xCoords.getType() << "\n";
+  llvm::errs() << "xCoordsLayout:\n" << xCoordsLayout << "\n";
+  llvm::errs() << "register in-dim size: " << xCoordsLayout.getInDimSize(kRegister) << "\n";
+  llvm::errs() << "lane in-dim size: " << xCoordsLayout.getInDimSize(kLane) << "\n";
+  llvm::errs() << "warp in-dim size: " << xCoordsLayout.getInDimSize(kWarp) << "\n";
+  llvm::errs() << "block in-dim size: " << xCoordsLayout.getInDimSize(kBlock) << "\n";
+  // Print register bases
+  for (unsigned i = 0; i < xCoordsLayout.getInDimSize(kRegister); ++i) {
+    auto basis = xCoordsLayout.getBasis(kRegister, i);
+    llvm::errs() << "  register=" << i << " -> basis: ";
+    for (auto v : basis) llvm::errs() << v << " ";
+    llvm::errs() << "\n";
+  }
+  // Print lane bases
+  for (unsigned i = 0; i < xCoordsLayout.getInDimSize(kLane); ++i) {
+    auto basis = xCoordsLayout.getBasis(kLane, i);
+    llvm::errs() << "  lane=" << i << " -> basis: ";
+    for (auto v : basis) llvm::errs() << v << " ";
+    llvm::errs() << "\n";
+  }
+  if (xCoordsLayout.getInDimSize(kRegister) < 4) {
+    llvm::errs() << "FAILED: register in-dim size < 4\n";
     return op->emitError("must have at least 4 x offsets per warp");
+  }
   // Check that the first two bases are [1] and [2].
   for (unsigned i : {0, 1}) {
-    if (xCoordsLayout.getBasis(kRegister, i).front() != (1 << i))
+    if (xCoordsLayout.getBasis(kRegister, i).front() != (1 << i)) {
+      llvm::errs() << "FAILED: register basis " << i << " is not " << (1 << i) << "\n";
       return op->emitError(
           "x offsets are not grouped by 4 contiguous elements");
+    }
   }
 
   // TMA expects the memdesc shape to match the alloc shape.
@@ -1553,8 +1578,15 @@ static LogicalResult iterateGatherScatterIndices(
   auto freeVars = xCoordsLayout.getFreeVariableMasks();
   unsigned regMask = freeVars[kRegister];
   unsigned warpMask = freeVars[kWarp];
-  if (freeVars[kLane] != (threadsPerWarp - 1))
+  llvm::errs() << "free variable masks:\n";
+  for (auto [name, mask] : freeVars)
+    llvm::errs() << "  " << name << " = 0x" << llvm::format_hex(mask, 8) << "\n";
+  if (freeVars[kLane] != (threadsPerWarp - 1)) {
+    llvm::errs() << "FAILED: lane free vars = 0x" << llvm::format_hex(freeVars[kLane], 8)
+                << " but expected 0x" << llvm::format_hex(threadsPerWarp - 1, 8) << "\n";
     return op->emitError("x offsets must be broadcasted across each warp");
+  }
+  llvm::errs() << "=== gather4 debug: ALL CONSTRAINTS PASSED ===\n\n";
 
   Value warpId = mlir::triton::gpu::WarpIdOp::create(rewriter, loc);
   Value blockId = nvgpu::ClusterCTAIdOp::create(rewriter, loc);
