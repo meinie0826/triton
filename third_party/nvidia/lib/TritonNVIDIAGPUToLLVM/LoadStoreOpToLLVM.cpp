@@ -1506,8 +1506,9 @@ static LogicalResult iterateGatherScatterIndices(
     for (auto v : basis) llvm::errs() << v << " ";
     llvm::errs() << "\n";
   }
-  // Print lane bases
-  for (unsigned i = 0; i < xCoordsLayout.getInDimSize(kLane); ++i) {
+  // Print lane bases - getInDimSize returns log2 of size but bases may be fewer
+  // for slice layouts; iterate only over actual bases count
+  for (int i = 0; (1 << i) < (int)xCoordsLayout.getInDimSize(kLane); ++i) {
     auto basis = xCoordsLayout.getBasis(kLane, i);
     llvm::errs() << "  lane=" << i << " -> basis: ";
     for (auto v : basis) llvm::errs() << v << " ";
