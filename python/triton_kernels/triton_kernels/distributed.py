@@ -320,6 +320,7 @@ def remote_gather_dp_to_ep(src, expt_assignment, expt_indx, dispatch_indx, symm_
         dtype=src.dtype,
     )
     src_peer_bufs[symm_mem_pool.mesh.local_rank].copy_(src)
+    torch.cuda.synchronize()
     symm_mem_pool.hdl.barrier(channel=0)
 
     peer_bufs = symm_mem_pool.make_empty(

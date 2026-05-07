@@ -8,6 +8,7 @@ import torch
 
 from bench_mlp import parse_dtype, quantize_weight, run_mlp as run_mlp_materialized, was_launched_with_torchrun
 from triton_kernels.distributed import (
+    convert_dp_to_ep,
     convert_ep_to_dp,
     make_expt_assignment,
     make_expt_dict_uniform,
@@ -49,6 +50,22 @@ def _time_ms(fn, iters: int):
     }
 
 
+def _assert_close_with_stats(name: str, ref: torch.Tensor, val: torch.Tensor, rtol=1e-3, atol=1e-2):
+    try:
+        torch.testing.assert_close(ref, val, rtol=rtol, atol=atol)
+    except AssertionError:
+        diff = (ref.float() - val.float()).abs()
+        max_diff = diff.max().item()
+        max_idx = diff.flatten().argmax().item()
+        print(
+            f"[{name}] mismatch: max_diff={max_diff} "
+            f"ref={ref.flatten()[max_idx].item()} val={val.flatten()[max_idx].item()} "
+            f"shape={tuple(ref.shape)}",
+            flush=True,
+        )
+        raise
+
+
 def run_mlp_fused(
     x_dp_local_bf16,
     x_dp_local_fp8,
@@ -78,29 +95,56 @@ def run_mlp_fused(
     combine_indx = l_global_active.mask_metadata.col_sorted_indx
     x_global_metadata = make_ragged_tensor_metadata(expt_sizes, dispatch_indx.shape[0])
     y_ep_local_metadata = remap_ragged_tensor_metadata(x_global_metadata, expt_assignment.expt_map[rank, :])
+    debug_checks = os.environ.get("TRITON_MOE_GATHER_DEBUG", "0") not in ("", "0", "false", "False")
 
     if symm_mem_pool.mesh.world_size > 1:
         # MegaMoE-style first cut: avoid source-rank push dispatch by exposing
         # local X through symmetric memory and pulling the needed remote rows on
         # each expert rank. FC1/FC2 stay on the existing ragged matmul path.
-        y_ep_local = remote_gather_dp_to_ep(x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool)
+        y_ep_local_remote = remote_gather_dp_to_ep(
+            x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
+        )
+        if debug_checks:
+            y_ep_local_ref = convert_dp_to_ep(
+                x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
+            )
+            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote)
         with scoped_opt_flags_constraints(fc1_constraints or {}):
-            y_ep_local = matmul(
-                y_ep_local,
+            y_fc1_local = matmul(
+                y_ep_local_remote,
                 w1_ep_local,
                 b1_ep_local,
                 a_ragged_metadata=y_ep_local_metadata,
                 precision_config=pc1,
                 fused_activation=act1,
             )
+        if debug_checks:
+            y_fc1_ref = matmul(
+                y_ep_local_ref,
+                w1_ep_local,
+                b1_ep_local,
+                a_ragged_metadata=y_ep_local_metadata,
+                precision_config=pc1,
+                fused_activation=act1,
+            )
+            _assert_close_with_stats("fc1", y_fc1_ref, y_fc1_local)
         with scoped_opt_flags_constraints(fc2_constraints or {}):
             y_ep_local = matmul(
-                y_ep_local,
+                y_fc1_local,
                 w2_ep_local,
                 b2_ep_local,
                 a_ragged_metadata=y_ep_local_metadata,
                 precision_config=pc2,
             )
+        if debug_checks:
+            y_fc2_ref = matmul(
+                y_fc1_ref,
+                w2_ep_local,
+                b2_ep_local,
+                a_ragged_metadata=y_ep_local_metadata,
+                precision_config=pc2,
+            )
+            _assert_close_with_stats("fc2", y_fc2_ref, y_ep_local)
         y_dp_local = convert_ep_to_dp(y_ep_local, expt_assignment, active_indx, combine_indx, symm_mem_pool)
         y_dp_local = y_dp_local.view(-1, n_expts_act, y_dp_local.shape[-1])
         z_dp_local, _ = reduce(y_dp_local, dim=1)
@@ -289,7 +333,7 @@ def compare_case(
     with torch.no_grad():
         ref = run_standard()
         fused = run_fused()
-        torch.testing.assert_close(ref.float(), fused.float(), rtol=1e-3, atol=1e-2)
+        _assert_close_with_stats("final", ref.float(), fused.float(), rtol=1e-3, atol=1e-2)
 
         standard_stats = _time_ms(run_standard, iters)
         fused_stats = _time_ms(run_fused, iters)
