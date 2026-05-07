@@ -91,6 +91,7 @@ def _matmul(
              IS_EPILOGUE_QUANT_MX: tl.constexpr = False,
              Y_VALUE_PACK_FACTOR: tl.constexpr = 1,
              FLATTEN_LOOPS: tl.constexpr = True, # Only relevant to persistent kernel
+             DEBUG_TMA_GATHER: tl.constexpr = False,
              pYPtrs=None,
              map_dst_coord=None,
              all_writes_issued=None,
@@ -196,6 +197,17 @@ def _matmul(
             W_SLICE_SIZES_DIVISIBILITY: tl.constexpr =  _W_SLICE_SIZES_DIVISIBILITY * (PACKED_BLOCK_K_W // BLOCK_K)
         else:
             W_SLICE_SIZES_DIVISIBILITY: tl.constexpr =  _W_SLICE_SIZES_DIVISIBILITY // (BLOCK_K // PACKED_BLOCK_K_W)
+    if DEBUG_TMA_GATHER:
+        tl.static_print(
+            "[_matmul tma_gather] ",
+            "HAS_GATHER=", GatherIndx is not None,
+            " X_TMA_MODE=", X_TMA_MODE,
+            " RAGGED_DIMENSION=", RAGGED_DIMENSION,
+            " BLOCK_M=", BLOCK_M,
+            " BLOCK_K=", BLOCK_K,
+            " X_TRANSPOSE=", X_TRANSPOSE,
+            " SPLIT_K=", SPLIT_K,
+        )
 
     OUT_BLOCK_N: tl.constexpr = BLOCK_N // ACTIVATION_REDUCTION_N
     yN = N // ACTIVATION_REDUCTION_N
