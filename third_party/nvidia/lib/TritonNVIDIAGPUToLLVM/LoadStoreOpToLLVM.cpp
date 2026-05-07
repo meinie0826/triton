@@ -1580,10 +1580,10 @@ static LogicalResult iterateGatherScatterIndices(
   unsigned warpMask = freeVars[kWarp];
   llvm::errs() << "free variable masks:\n";
   for (auto [name, mask] : freeVars)
-    llvm::errs() << "  " << name << " = 0x" << llvm::format_hex(mask, 8) << "\n";
+    llvm::errs() << "  " << name << " = " << mask << "\n";
   if (freeVars[kLane] != (threadsPerWarp - 1)) {
-    llvm::errs() << "FAILED: lane free vars = 0x" << llvm::format_hex(freeVars[kLane], 8)
-                << " but expected 0x" << llvm::format_hex(threadsPerWarp - 1, 8) << "\n";
+    llvm::errs() << "FAILED: lane free vars = " << freeVars[kLane]
+                << " but expected " << (threadsPerWarp - 1) << "\n";
     return op->emitError("x offsets must be broadcasted across each warp");
   }
   llvm::errs() << "=== gather4 debug: ALL CONSTRAINTS PASSED ===\n\n";
