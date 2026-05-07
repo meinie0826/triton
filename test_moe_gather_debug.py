@@ -54,7 +54,7 @@ def test_tl_gather():
 
     grid = (Z, triton.cdiv(M, BLOCK_M))
     gather_kernel[grid](
-        out, *out.stride(),
+        out, out.stride(0),
         src, *src.stride(),
         gather_indx,
         M, N, BLOCK_M, BLOCK_N, Z,
