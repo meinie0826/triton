@@ -352,6 +352,7 @@ def remote_gather_dp_to_ep(src, expt_assignment, expt_indx, dispatch_indx, symm_
         N_RANKS=symm_mem_pool.mesh.world_size,
         BLOCK=BLOCK,
     )
+    torch.cuda.synchronize()
     symm_mem_pool.hdl.barrier(channel=0)
     return dst_local
 
