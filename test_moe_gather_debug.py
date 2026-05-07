@@ -29,9 +29,9 @@ def gather_kernel(
     src_ptrs = src_ptr + pid_z.to(tl.int64) * stride_src_z + offs_m[:, None] * stride_src_m + offs_n[None, :] * stride_src_k
     src = tl.load(src_ptrs, mask=mask_m[:, None] & mask_n[None, :], other=0.0)
 
-    # Load gather indices and expand to match src rank
-    gather_indx_1d = tl.load(gather_indx_ptr + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=0)
-    gather_indx = gather_indx_1d[:, None].expand(BLOCK_M, BLOCK_N)
+    # Load gather indices (expand to 2D to match src rank)
+    gather_indx = tl.load(gather_indx_ptr + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=0)
+    gather_indx = gather_indx[:, None]
 
     # Perform gather: src[gather_indx, :]
     out = tl.gather(src, gather_indx, axis=0)
