@@ -109,7 +109,30 @@ def run_mlp_fused(
             y_ep_local_ref = convert_dp_to_ep(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             ).clone()
-            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
+            # Only compare rows that fc1 matmul will actually access
+            valid_rows = y_ep_local_metadata.slice_offs[-1].item() + y_ep_local_metadata.slice_sizes[-1].item() \
+                if y_ep_local_metadata.slice_sizes.numel() > 0 else 0
+            # Gather the actual row indices accessed by the ragged matmul
+            # row_sorted_indx entries for local experts give the actual row indices
+            expt_map = expt_assignment.expt_map[rank, :]
+            local_expt_mask = expt_map >= 0
+            local_expts = expt_map[local_expt_mask]
+            # collect all dispatch rows for local experts
+            active_indx_flat = active_indx  # (n_tokens_global, n_expts_act)
+            dispatch_flat = dispatch_indx   # (n_tokens_global * n_expts_act,) flat
+            n_tot = active_indx.shape[0] * active_indx.shape[1]
+            active_flat = active_indx.reshape(-1)   # (n_tokens_global * n_expts_act,)
+            local_expt_set = set(local_expts.tolist())
+            valid_row_mask = torch.tensor([int(a.item()) in local_expt_set for a in active_flat],
+                                          device=active_flat.device, dtype=torch.bool)
+            valid_row_indices = dispatch_flat[:n_tot][valid_row_mask]
+            if valid_row_indices.numel() > 0:
+                _assert_close_with_stats(
+                    "dp_to_ep_remote[valid_rows]",
+                    y_ep_local_ref[valid_row_indices],
+                    y_ep_local_remote_clone[valid_row_indices],
+                    rtol=0.0, atol=0.0,
+                )
             y_ep_local_for_fc1 = y_ep_local_remote_clone
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
