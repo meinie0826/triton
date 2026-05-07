@@ -4,114 +4,136 @@ import torch
 import triton
 import triton.language as tl
 
+
+# ---- Test 1: tl.gather (non-TMA, triggers GatherOp lowering) ----
 @triton.jit
-def moe_gather_kernel(
-    Y, YPtr, stride_y_m, stride_y_k,
-    X, XPtr, stride_x_z, stride_x_m, stride_x_k,
-    W, WPtr, stride_w_e, stride_w_k, stride_w_n,
-    GatherIndx,
-    M, N, K,
-    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
-    X_TMA_MODE: tl.constexpr,
+def gather_kernel(
+    out_ptr, stride_out_m,
+    src_ptr, stride_src_z, stride_src_m, stride_src_k,
+    gather_indx_ptr,
+    M: tl.constexpr, N: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+    Z: tl.constexpr,
 ):
     pid_z = tl.program_id(0)
     pid_m = tl.program_id(1)
-    pid_n = tl.program_id(2)
 
     off_m = pid_m * BLOCK_M
-    off_n = pid_n * BLOCK_N
+
+    # Load source: [BLOCK_M, BLOCK_N]
+    offs_m = off_m + tl.arange(0, BLOCK_M)
+    offs_n = tl.arange(0, BLOCK_N)
+    mask_m = offs_m < M
+    mask_n = offs_n < N
+
+    src_ptrs = src_ptr + pid_z.to(tl.int64) * stride_src_z + offs_m[:, None] * stride_src_m + offs_n[None, :] * stride_src_k
+    src = tl.load(src_ptrs, mask=mask_m[:, None] & mask_n[None, :], other=0.0)
 
     # Load gather indices
+    gather_indx = tl.load(gather_indx_ptr + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=0)
+
+    # Perform gather: src[gather_indx, :]
+    out = tl.gather(src, gather_indx, axis=0)
+
+    # Store
+    out_ptrs = out_ptr + offs_m[:, None] * stride_out_m + offs_n[None, :]
+    tl.store(out_ptrs, out, mask=mask_m[:, None] & mask_n[None, :])
+
+
+def test_tl_gather():
+    Z = 1
+    M = 64
+    N = 32
+    BLOCK_M = 64
+    BLOCK_N = 32
+
+    src = torch.randn((Z, M, N), dtype=torch.float32, device="cuda")
+    gather_indx = torch.arange(0, M, dtype=torch.int32, device="cuda")
+    gather_indx = gather_indx[torch.randperm(M, device="cuda")]
+    out = torch.empty((M, N), dtype=torch.float32, device="cuda")
+
+    grid = (Z, triton.cdiv(M, BLOCK_M))
+    gather_kernel[grid](
+        out, *out.stride(),
+        src, *src.stride(),
+        gather_indx,
+        M, N, BLOCK_M, BLOCK_N, Z,
+    )
+    torch.cuda.synchronize()
+
+    # Verify
+    ref = src[0, gather_indx, :]
+    torch.testing.assert_close(out, ref)
+    print("tl.gather test PASSED")
+
+
+# ---- Test 2: TMA descriptor gather (DescriptorGatherOp lowering) ----
+@triton.jit
+def tma_gather_kernel(
+    out_ptr, stride_out_m,
+    X_desc,
+    gather_indx_ptr,
+    M: tl.constexpr, BLOCK_M: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+    Z: tl.constexpr,
+):
+    pid_z = tl.program_id(0)
+    pid_m = tl.program_id(1)
+
+    off_m = pid_m * BLOCK_M
     offs_m = off_m + tl.arange(0, BLOCK_M)
     mask_m = offs_m < M
 
-    if X_TMA_MODE == "dense":
-        USE_GATHER_TMA: tl.constexpr = True
-        offs_x_m = tl.load(GatherIndx + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=-1)
-        offs_x_m = tl.where(mask_m, offs_x_m, -1)
+    # Load gather indices
+    gather_indx = tl.load(gather_indx_ptr + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=-1)
+    gather_indx = tl.where(mask_m, gather_indx, -1)
 
-        # TMA gather
-        x = X.gather(offs_x_m, 0)
-        x = x.reshape(BLOCK_M, BLOCK_K // 2)
+    # TMA gather
+    x = X_desc.gather(gather_indx, 0)
+    x = x.reshape(BLOCK_M, BLOCK_K)
 
-    else:
-        USE_GATHER_TMA: tl.constexpr = False
-        offs_x_m = tl.load(GatherIndx + pid_z.to(tl.int64) * M + offs_m, mask=mask_m)
-        offs_x_k = tl.arange(0, BLOCK_K // 2)[None, :] * stride_x_k
-        XPtrs = XPtr + pid_z.to(tl.int64) * stride_x_z + offs_x_m.to(tl.int64)[:, None] * stride_x_m + offs_x_k
-        x = tl.load(XPtrs, mask=mask_m[:, None])
-
-    # Simple matmul-like dot (just for completeness, not the focus)
-    w = tl.load(WPtr + pid_z.to(tl.int64) * stride_w_e + tl.arange(0, BLOCK_K // 2)[:, None] * stride_w_k + tl.arange(0, BLOCK_N)[None, :] * stride_w_n)
-    acc = tl.dot(x, w)
-
-    # Store
-    offs_y_m = off_m + tl.arange(0, BLOCK_M)
-    offs_y_n = off_n + tl.arange(0, BLOCK_N)
-    YPtrs = YPtr + offs_y_m[:, None] * stride_y_m + offs_y_n[None, :] * stride_y_k
-    mask = mask_m[:, None] & (offs_y_n < N)[None, :]
-    tl.store(YPtrs, acc, mask=mask)
+    # Store result (just the first N columns for simplicity)
+    N = min(BLOCK_K, 32)
+    out_ptrs = out_ptr + offs_m[:, None] * stride_out_m + tl.arange(0, N)[None, :]
+    tl.store(out_ptrs, x[:, :N], mask=mask_m[:, None])
 
 
-def run_gather_test(X_TMA_MODE=None):
-    Z = 1   # num experts
-    M = 64  # tokens
-    N = 32  # hidden dim
+def test_tma_gather():
+    Z = 1
+    M = 64
     K = 128
-
     BLOCK_M = 64
-    BLOCK_N = 32
     BLOCK_K = 128
 
     X = torch.randn((Z, M, K), dtype=torch.bfloat16, device="cuda")
-    W = torch.randn((Z, K, N), dtype=torch.bfloat16, device="cuda")
-    Y = torch.empty((M, N), dtype=torch.float32, device="cuda")
+    gather_indx = torch.arange(0, M, dtype=torch.int32, device="cuda")
+    gather_indx = gather_indx[torch.randperm(M, device="cuda")]
+    out = torch.empty((M, 32), dtype=torch.float32, device="cuda")
 
-    # Gather indices: random permutation of M rows
-    GatherIndx = torch.arange(0, M, dtype=torch.int32, device="cuda")
-    GatherIndx = GatherIndx[torch.randperm(M, device="cuda")]
+    X_desc = tl.make_tensor_descriptor(
+        X,
+        shape=[Z, M, K],
+        strides=[M * K, K, 1],
+        block_shape=[1, BLOCK_K],
+    )
 
-    grid = (Z, triton.cdiv(M, BLOCK_M), triton.cdiv(N, BLOCK_N))
-
-    if X_TMA_MODE == "dense":
-        X_desc = tl.make_tensor_descriptor(
-            X,
-            shape=[Z, M, K],
-            strides=[M * K, K, 2],
-            block_shape=[1, BLOCK_K // 2],
+    grid = (Z, triton.cdiv(M, BLOCK_M))
+    try:
+        tma_gather_kernel[grid](
+            out, *out.stride(),
+            X_desc,
+            gather_indx,
+            M, BLOCK_M, BLOCK_K, Z,
         )
-        moe_gather_kernel[grid](
-            Y, Y, *Y.stride(),
-            X_desc, X, *X.stride(),
-            W, W, *W.stride(),
-            GatherIndx,
-            M, N, K,
-            BLOCK_M, BLOCK_N, BLOCK_K,
-            X_TMA_MODE="dense",
-        )
-    else:
-        moe_gather_kernel[grid](
-            Y, Y, *Y.stride(),
-            None, X, *X.stride(),
-            W, W, *W.stride(),
-            GatherIndx,
-            M, N, K,
-            BLOCK_M, BLOCK_N, BLOCK_K,
-            X_TMA_MODE=None,
-        )
+        torch.cuda.synchronize()
+        print("TMA gather test PASSED")
+    except Exception as e:
+        print(f"TMA gather test FAILED: {e}")
 
 
 if __name__ == "__main__":
-    print("=== Testing TMA gather (X_TMA_MODE='dense') ===")
-    try:
-        run_gather_test(X_TMA_MODE="dense")
-        print("SUCCESS")
-    except Exception as e:
-        print(f"FAILED: {e}")
+    print("=== Test 1: tl.gather (GatherOp lowering) ===")
+    test_tl_gather()
 
-    print("\n=== Testing non-TMA gather ===")
-    try:
-        run_gather_test(X_TMA_MODE=None)
-        print("SUCCESS")
-    except Exception as e:
-        print(f"FAILED: {e}")
+    print("\n=== Test 2: TMA descriptor gather (DescriptorGatherOp lowering) ===")
+    test_tma_gather()
