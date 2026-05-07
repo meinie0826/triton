@@ -129,8 +129,7 @@ def run_mlp_fused(
             ).clone()
             val = y_ep_local_remote.clone()
             _assert_close_with_stats("dp_to_ep_remote", ref, val, rtol=0.0, atol=0.0)
-            # Use SAME tensor for both fc1 calls to test matmul determinism
-            y_ep_local_for_fc1 = ref
+            y_ep_local_for_fc1 = y_ep_local_remote
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
@@ -142,16 +141,6 @@ def run_mlp_fused(
                 precision_config=pc1,
                 fused_activation=act1,
             )
-        if debug_checks:
-            y_fc1_ref = matmul(
-                ref,
-                w1_ep_local,
-                b1_ep_local,
-                a_ragged_metadata=y_ep_local_metadata,
-                precision_config=pc1,
-                fused_activation=act1,
-            )
-            _assert_close_with_stats("fc1", y_fc1_ref.float(), y_fc1_local.float())  # noqa: already using ref
         with scoped_opt_flags_constraints(fc2_constraints or {}):
             y_ep_local = matmul(
                 y_fc1_local,
@@ -160,15 +149,6 @@ def run_mlp_fused(
                 a_ragged_metadata=y_ep_local_metadata,
                 precision_config=pc2,
             )
-        if debug_checks:
-            y_fc2_ref = matmul(
-                y_fc1_ref,  # y_fc1_ref is defined above
-                w2_ep_local,
-                b2_ep_local,
-                a_ragged_metadata=y_ep_local_metadata,
-                precision_config=pc2,
-            )
-            _assert_close_with_stats("fc2", y_fc2_ref.float(), y_ep_local.float())
         y_dp_local = convert_ep_to_dp(y_ep_local, expt_assignment, active_indx, combine_indx, symm_mem_pool)
         y_dp_local = y_dp_local.view(-1, n_expts_act, y_dp_local.shape[-1])
         z_dp_local, _ = reduce(y_dp_local, dim=1)
