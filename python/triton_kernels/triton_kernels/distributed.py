@@ -284,14 +284,14 @@ def _gather_dp_to_ep_remote(
     src_row_ptr = tl.zeros((N_EXPT_ACT,), dtype=tl.int64)
     for i in tl.static_range(N_RANKS):
         peer_src_ptr = peer_src_ptrs[i].to(tl.int64, bitcast=True)
-        src_row_ptr = tl.where(src_rank == i, peer_src_ptr + off_m_local * src_stride_m, src_row_ptr)
+        src_row_ptr = tl.where(src_rank == i, peer_src_ptr, src_row_ptr)
     src_row_ptr = src_row_ptr.to(dst_ptr.dtype, bitcast=True)
     src_row_ptr = tl.multiple_of(src_row_ptr, 16)
-    dst_row_local = dst_row_indx - SRC_RANK * n_tokens_local
+    src_row_ptr = src_row_ptr + off_m_local * src_stride_m
     dst_row_ptrs = dst_ptr.to(tl.int64, bitcast=True)
     dst_row_ptrs = dst_row_ptrs.to(dst_ptr.dtype, bitcast=True)
     dst_row_ptrs = tl.multiple_of(dst_row_ptrs, 16)
-    dst_row_ptrs = dst_row_ptrs + dst_row_local * dst_stride_m
+    dst_row_ptrs = dst_row_ptrs + dst_row_indx * dst_stride_m
     offs_n = tl.arange(0, BLOCK)
     src_ptrs = src_row_ptr[:, None] + offs_n[None, :]
     dst_ptrs = dst_row_ptrs[:, None] + offs_n[None, :]
