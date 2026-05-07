@@ -1,77 +1,83 @@
 #!/usr/bin/env python3
-"""Minimal MoE-style gather test to trace lowering path."""
+"""Minimal gather test to trace lowering path."""
 import torch
 import triton
 import triton.language as tl
 
 
-# ---- Test 1: tl.gather (non-TMA, triggers GatherOp lowering) ----
+# ---- Test 1: tl.gather 1D (triggers GatherOp lowering) ----
 @triton.jit
-def gather_kernel(
-    out_ptr, stride_out_m,
-    src_ptr, stride_src_z, stride_src_m, stride_src_k,
-    gather_indx_ptr,
-    M: tl.constexpr, N: tl.constexpr,
-    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-    Z: tl.constexpr,
+def gather_1d_kernel(
+    out_ptr,
+    src_ptr,
+    idx_ptr,
+    AXIS: tl.constexpr,
+    N: tl.constexpr,
+    M: tl.constexpr,
 ):
-    pid_z = tl.program_id(0)
-    pid_m = tl.program_id(1)
-
-    off_m = pid_m * BLOCK_M
-
-    # Load source: [BLOCK_M, BLOCK_N]
-    offs_m = off_m + tl.arange(0, BLOCK_M)
-    offs_n = tl.arange(0, BLOCK_N)
-    mask_m = offs_m < M
-    mask_n = offs_n < N
-
-    src_ptrs = src_ptr + pid_z.to(tl.int64) * stride_src_z + offs_m[:, None] * stride_src_m + offs_n[None, :] * stride_src_k
-    src = tl.load(src_ptrs, mask=mask_m[:, None] & mask_n[None, :], other=0.0)
-
-    # Load gather indices (expand to 2D to match src rank)
-    gather_indx = tl.load(gather_indx_ptr + pid_z.to(tl.int64) * M + offs_m, mask=mask_m, other=0)
-    gather_indx = gather_indx[:, None]
-
-    # Perform gather: src[gather_indx, :]
-    out = tl.gather(src, gather_indx, axis=0)
-
-    # Store
-    out_ptrs = out_ptr + offs_m[:, None] * stride_out_m + offs_n[None, :]
-    tl.store(out_ptrs, out, mask=mask_m[:, None] & mask_n[None, :])
+    src = tl.load(src_ptr + tl.arange(0, N))
+    idx = tl.load(idx_ptr + tl.arange(0, M))
+    out = tl.gather(src, idx, AXIS)
+    tl.store(out_ptr + tl.arange(0, M), out)
 
 
-def test_tl_gather():
-    Z = 1
-    M = 64
+def test_tl_gather_1d():
     N = 32
-    BLOCK_M = 64
-    BLOCK_N = 32
+    M = 64
+    src = torch.randn(N, dtype=torch.float32, device="cuda")
+    idx = torch.randint(0, N, (M,), dtype=torch.int32, device="cuda")
+    out = torch.empty(M, dtype=torch.float32, device="cuda")
 
-    src = torch.randn((Z, M, N), dtype=torch.float32, device="cuda")
-    gather_indx = torch.arange(0, M, dtype=torch.int32, device="cuda")
-    gather_indx = gather_indx[torch.randperm(M, device="cuda")]
-    out = torch.empty((M, N), dtype=torch.float32, device="cuda")
-
-    grid = (Z, triton.cdiv(M, BLOCK_M))
-    gather_kernel[grid](
-        out, out.stride(0),
-        src, *src.stride(),
-        gather_indx,
-        M, N, BLOCK_M, BLOCK_N, Z,
-    )
+    gather_1d_kernel[(1,)](out, src, idx, AXIS=0, N=N, M=M)
     torch.cuda.synchronize()
 
-    # Verify
-    ref = src[0, gather_indx, :]
-    torch.testing.assert_close(out, ref)
-    print("tl.gather test PASSED")
+    expected = torch.gather(src, 0, idx)
+    torch.testing.assert_close(out, expected)
+    print("tl.gather 1D test PASSED")
 
 
-# ---- Test 2: TMA descriptor gather (DescriptorGatherOp lowering) ----
+# ---- Test 2: tl.gather 2D ----
+@triton.jit
+def gather_2d_kernel(
+    out_ptr, out_stride0, out_stride1,
+    src_ptr, src_stride0, src_stride1,
+    idx_ptr, idx_stride0, idx_stride1,
+    AXIS: tl.constexpr,
+    M: tl.constexpr, N: tl.constexpr,
+    IM: tl.constexpr, IN: tl.constexpr,
+):
+    src_offs = tl.arange(0, M)[:, None] * src_stride0 + tl.arange(0, N)[None, :] * src_stride1
+    src = tl.load(src_ptr + src_offs)
+
+    idx_offs = tl.arange(0, IM)[:, None] * idx_stride0 + tl.arange(0, IN)[None, :] * idx_stride1
+    idx = tl.load(idx_ptr + idx_offs)
+
+    out = tl.gather(src, idx, AXIS)
+
+    out_offs2 = tl.arange(0, IM)[:, None] * out_stride0 + tl.arange(0, IN)[None, :] * out_stride1
+    tl.store(out_ptr + out_offs2, out)
+
+
+def test_tl_gather_2d():
+    M, N = 32, 32
+    IM, IN = 64, 32
+    src = torch.randn(M, N, dtype=torch.float32, device="cuda")
+    idx = torch.randint(0, M, (IM, IN), dtype=torch.int32, device="cuda")
+    out = torch.empty(IM, IN, dtype=torch.float32, device="cuda")
+
+    gather_2d_kernel[(1,)](out, *out.stride(), src, *src.stride(), idx, *idx.stride(),
+                           AXIS=0, M=M, N=N, IM=IM, IN=IN)
+    torch.cuda.synchronize()
+
+    expected = torch.gather(src, 0, idx)
+    torch.testing.assert_close(out, expected)
+    print("tl.gather 2D test PASSED")
+
+
+# ---- Test 3: TMA descriptor gather ----
 @triton.jit
 def tma_gather_kernel(
-    out_ptr, stride_out_m,
+    out_ptr,
     X_desc,
     gather_indx_ptr,
     M: tl.constexpr, BLOCK_M: tl.constexpr,
@@ -91,12 +97,10 @@ def tma_gather_kernel(
 
     # TMA gather
     x = X_desc.gather(gather_indx, 0)
-    x = x.reshape(BLOCK_M, BLOCK_K)
 
-    # Store result (just the first N columns for simplicity)
-    N = min(BLOCK_K, 32)
-    out_ptrs = out_ptr + offs_m[:, None] * stride_out_m + tl.arange(0, N)[None, :]
-    tl.store(out_ptrs, x[:, :N], mask=mask_m[:, None])
+    # Store result
+    offs_n = tl.arange(0, min(BLOCK_K, 32))
+    tl.store(out_ptr + offs_m[:, None] * 32 + offs_n[None, :], x[:, :32], mask=mask_m[:, None])
 
 
 def test_tma_gather():
@@ -121,9 +125,7 @@ def test_tma_gather():
     grid = (Z, triton.cdiv(M, BLOCK_M))
     try:
         tma_gather_kernel[grid](
-            out, *out.stride(),
-            X_desc,
-            gather_indx,
+            out, X_desc, gather_indx,
             M, BLOCK_M, BLOCK_K, Z,
         )
         torch.cuda.synchronize()
@@ -133,8 +135,11 @@ def test_tma_gather():
 
 
 if __name__ == "__main__":
-    print("=== Test 1: tl.gather (GatherOp lowering) ===")
-    test_tl_gather()
+    print("=== Test 1: tl.gather 1D ===")
+    test_tl_gather_1d()
 
-    print("\n=== Test 2: TMA descriptor gather (DescriptorGatherOp lowering) ===")
+    print("\n=== Test 2: tl.gather 2D ===")
+    test_tl_gather_2d()
+
+    print("\n=== Test 3: TMA descriptor gather ===")
     test_tma_gather()
