@@ -129,7 +129,7 @@ def run_mlp_fused(
             ).clone()
             val = y_ep_local_remote.clone()
             _assert_close_with_stats("dp_to_ep_remote", ref, val, rtol=0.0, atol=0.0)
-            y_ep_local_for_fc1 = y_ep_local_remote
+            y_ep_local_for_fc1 = val
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
