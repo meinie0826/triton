@@ -57,12 +57,31 @@ def _assert_close_with_stats(name: str, ref: torch.Tensor, val: torch.Tensor, rt
         diff = (ref.float() - val.float()).abs()
         max_diff = diff.max().item()
         max_idx = diff.flatten().argmax().item()
+        # Per-row analysis: which rows differ
+        row_diff = diff.max(dim=-1).values  # (n_rows,)
+        mismatch_rows = (row_diff > 0).nonzero(as_tuple=True)[0]
+        n_total = ref.shape[0]
+        n_mismatch = mismatch_rows.shape[0]
         print(
             f"[{name}] mismatch: max_diff={max_diff} "
             f"ref={ref.flatten()[max_idx].item()} val={val.flatten()[max_idx].item()} "
-            f"shape={tuple(ref.shape)}",
+            f"shape={tuple(ref.shape)} "
+            f"mismatch_rows={n_mismatch}/{n_total} "
+            f"first5_rows={mismatch_rows[:5].tolist()}",
             flush=True,
         )
+        # Print first mismatching row details
+        if mismatch_rows.shape[0] > 0:
+            r = mismatch_rows[0].item()
+            ref_row = ref[r].float()
+            val_row = val[r].float()
+            nonzero_ref = (ref_row != 0).sum().item()
+            nonzero_val = (val_row != 0).sum().item()
+            print(
+                f"[{name}] row[{r}]: ref_nonzero={nonzero_ref} val_nonzero={nonzero_val} "
+                f"ref_max={ref_row.max().item():.3f} val_max={val_row.max().item():.3f}",
+                flush=True,
+            )
         raise
 
 
