@@ -2,6 +2,7 @@
 # fmt: off
 from dataclasses import dataclass
 import itertools
+import os
 import torch
 import triton
 from enum import Enum, auto
@@ -88,6 +89,14 @@ specializations = SpecializationModule("matmul",
 # -----------------------------------------------------------------------------
 #                    Matrix Multiplication + Outer Gather/Scatter
 # -----------------------------------------------------------------------------
+
+def _debug_tma_gather_enabled():
+    return os.environ.get("TRITON_MOE_GATHER_DEBUG", "0") not in ("", "0", "false", "False")
+
+
+def _debug_tma_gather_log(msg):
+    if _debug_tma_gather_enabled():
+        print(f"[triton_kernels.matmul.tma_gather] {msg}", flush=True)
 
 
 def can_overflow_int32(tensor: torch.Tensor):
@@ -400,6 +409,16 @@ def matmul(a, b, bias,
         # which is too big.
         can_use_tma = False
     has_gather_tma = has_gather and target_info.has_tma_gather()
+    if _debug_tma_gather_enabled() and has_gather:
+        _debug_tma_gather_log(
+            "gather path decision: "
+            f"has_gather={has_gather}, has_gather_tma={has_gather_tma}, "
+            f"can_use_tma={can_use_tma}, ragged_dimension={ragged_dimension}, "
+            f"a_dtype={a.dtype}, b_dtype={b.dtype}, "
+            f"a_layout={getattr(a.storage.layout, 'name', type(a.storage.layout).__name__)}, "
+            f"b_layout={getattr(b.storage.layout, 'name', type(b.storage.layout).__name__)}, "
+            f"gather_indx_shape={tuple(gather_indx.shape)}, gather_indx_stride={tuple(gather_indx.stride())}"
+        )
     is_ragged_mx = (a_has_mx or b_has_mx) and (is_a_ragged or is_b_ragged)
     can_use_split_k = scatter_indx is None and not is_ragged_mx and ragged_dimension != "K" and c_acc_in is None and precision_config.c_mx_scale is None
     block_k = None
@@ -518,6 +537,15 @@ def matmul(a, b, bias,
 
     a_tma_block_size = [1, opt_flags.block_k] if has_gather_tma else [1, opt_flags.block_m, opt_flags.block_k]
     a_tma_mode = None if not a_has_tma else "ragged" if ragged_dimension == "M" and not has_gather_tma else "dense"
+    if _debug_tma_gather_enabled() and has_gather:
+        _debug_tma_gather_log(
+            "x TMA setup: "
+            f"a_has_tma={a_has_tma}, a_tma_mode={a_tma_mode}, "
+            f"a_tma_block_size={a_tma_block_size}, "
+            f"opt_flags.is_persistent={opt_flags.is_persistent}, "
+            f"opt_flags.block_m={opt_flags.block_m}, opt_flags.block_k={opt_flags.block_k}, "
+            f"a.stride={tuple(a.stride())}, a.shape={tuple(a.shape)}"
+        )
     a_tensor_or_tma = make_tma(a, a_tma_block_size, a_tma_mode) if a_has_tma else a.storage.data
     if a_has_tma and precision_config.allow_tf32 and a.storage.data.dtype == torch.float32:
         a_tensor_or_tma.round_f32_to_tf32 = True
@@ -679,6 +707,7 @@ def matmul(a, b, bias,
                    ),
                    Y_VALUE_PACK_FACTOR=precision_config.c_value_pack_factor,
                    NUM_SMS = grid if opt_flags.is_persistent else 0,
+                   DEBUG_TMA_GATHER=_debug_tma_gather_enabled(),
                    **fused_comm_kwargs,
                    **opt_flags.target_kernel_kwargs,
                    **extra_kernel_kwargs)

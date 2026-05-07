@@ -1500,9 +1500,9 @@ static LogicalResult iterateGatherScatterIndices(
   llvm::errs() << "warp in-dim size: " << xCoordsLayout.getInDimSize(kWarp) << "\n";
   llvm::errs() << "block in-dim size: " << xCoordsLayout.getInDimSize(kBlock) << "\n";
   // Print register bases
-  for (unsigned i = 0; i < xCoordsLayout.getInDimSize(kRegister); ++i) {
+  for (unsigned i = 0; i < xCoordsLayout.getInDimSizeLog2(kRegister); ++i) {
     auto basis = xCoordsLayout.getBasis(kRegister, i);
-    llvm::errs() << "  register=" << i << " -> basis: ";
+    llvm::errs() << "  register basis 2^" << i << " -> ";
     for (auto v : basis) llvm::errs() << v << " ";
     llvm::errs() << "\n";
   }
@@ -1525,13 +1525,32 @@ static LogicalResult iterateGatherScatterIndices(
   // TMA expects the memdesc shape to match the alloc shape.
   triton::gpu::MemDescType smemType = smem.getType();
   ArrayRef<int64_t> allocShape = smemType.getAllocShape();
-  if (allocShape.size() < 2 || smemType.getShape() != allocShape.take_back(2))
+  llvm::errs() << "smem type: " << smemType << "\n";
+  llvm::errs() << "smem shape: [";
+  for (size_t i = 0; i < smemType.getShape().size(); ++i) {
+    if (i)
+      llvm::errs() << ", ";
+    llvm::errs() << smemType.getShape()[i];
+  }
+  llvm::errs() << "], alloc shape: [";
+  for (size_t i = 0; i < allocShape.size(); ++i) {
+    if (i)
+      llvm::errs() << ", ";
+    llvm::errs() << allocShape[i];
+  }
+  llvm::errs() << "]\n";
+  if (allocShape.size() < 2 || smemType.getShape() != allocShape.take_back(2)) {
+    llvm::errs() << "FAILED: memdesc shape does not match trailing alloc shape\n";
     return op->emitError("memdesc shape must match alloc shape");
+  }
   // `NVMMASharedEncodingAttr` means the core matrix tiles are placed next to
   // each other in shared memory, which lines up with how `gather4` loads data.
   auto enc = dyn_cast<NVMMASharedEncodingAttr>(smemType.getEncoding());
-  if (!enc)
+  if (!enc) {
+    llvm::errs() << "FAILED: dst encoding is not NVMMASharedEncodingAttr: "
+                 << smemType.getEncoding() << "\n";
     return op->emitError("requires dst encoding NVMMASharedEncodingAttr");
+  }
   if (enc.getFp4Padded())
     yOffsetValue = b.mul(yOffsetValue, b.i32_val(2));
   Type llvmElemTy = typeConverter.convertType(smemType.getElementType());
@@ -1550,6 +1569,19 @@ static LogicalResult iterateGatherScatterIndices(
   unsigned innerBlockSize = shapePerCTA.back();
   unsigned contigDimSize = tmaBlockShape.back();
   unsigned numMessagesPerRow = ceil<unsigned>(innerBlockSize, contigDimSize);
+  llvm::errs() << "shapePerCTA: [";
+  for (size_t i = 0; i < shapePerCTA.size(); ++i) {
+    if (i)
+      llvm::errs() << ", ";
+    llvm::errs() << shapePerCTA[i];
+  }
+  llvm::errs() << "], tmaBlockShape: [";
+  for (size_t i = 0; i < tmaBlockShape.size(); ++i) {
+    if (i)
+      llvm::errs() << ", ";
+    llvm::errs() << tmaBlockShape[i];
+  }
+  llvm::errs() << "], numMessagesPerRow=" << numMessagesPerRow << "\n";
 
   // `xCoordsLayout` maps the register ID into dim0. Tile dim1 by adding a new
   // dimension representing the TMA message ID.

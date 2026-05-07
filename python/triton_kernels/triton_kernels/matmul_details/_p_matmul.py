@@ -119,6 +119,7 @@ def _p_matmul(
              Y_VALUE_PACK_FACTOR: tl.constexpr = 1,
              FLATTEN_LOOPS: tl.constexpr = True,
              W_SHUFFLED: tl.constexpr = False,
+             DEBUG_TMA_GATHER: tl.constexpr = False,
              pYPtrs=None,
              map_dst_coord=None,
              all_writes_issued=None,
@@ -207,6 +208,19 @@ def _p_matmul(
     HAS_GATHER: tl.constexpr = GatherIndx is not None
     USE_GATHER_TMA: tl.constexpr = HAS_GATHER and X_TMA_MODE == "dense"
     USE_SCATTER_TMA: tl.constexpr = HAS_SCATTER and Y_TMA_MODE == "dense"
+    if DEBUG_TMA_GATHER:
+        tl.static_print(
+            "[_p_matmul tma_gather] ",
+            "HAS_GATHER=", HAS_GATHER,
+            " USE_GATHER_TMA=", USE_GATHER_TMA,
+            " X_TMA_MODE=", X_TMA_MODE,
+            " RAGGED_DIMENSION=", RAGGED_DIMENSION,
+            " BLOCK_M=", BLOCK_M,
+            " BLOCK_K=", BLOCK_K,
+            " X_TRANSPOSE=", X_TRANSPOSE,
+            " SPLIT_K=", SPLIT_K,
+            " W_SHUFFLED=", W_SHUFFLED,
+        )
 
     if RAGGED_DIMENSION == "K":
         tl.static_assert((OutAcc is None) or Y_ACC_IS_Y, "Using differernt y_acc is not supported with TMA kernel.")
