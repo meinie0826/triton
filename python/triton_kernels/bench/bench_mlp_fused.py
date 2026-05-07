@@ -108,7 +108,7 @@ def run_mlp_fused(
             y_ep_local_ref = convert_dp_to_ep(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             )
-            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote)
+            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote, rtol=0.0, atol=0.0)
         with scoped_opt_flags_constraints(fc1_constraints or {}):
             y_fc1_local = matmul(
                 y_ep_local_remote,
