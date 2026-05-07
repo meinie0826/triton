@@ -208,6 +208,7 @@ def convert_dp_to_ep(src, expt_assignment, expt_indx, gate_indx, symm_mem_pool: 
         N_RANKS=symm_mem_pool.mesh.world_size,
         BLOCK=BLOCK,
     )
+    torch.cuda.synchronize()
     hdl.barrier(channel=0)
     return dst_local
 
