@@ -109,29 +109,10 @@ def run_mlp_fused(
             y_ep_local_ref = convert_dp_to_ep(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             ).clone()
-            # Check valid rows (those actually accessed by fc1 matmul)
-            active_flat = active_indx.reshape(-1)
-            dispatch_flat = dispatch_indx
-            n_tot = active_flat.shape[0]
-            expt_map = expt_assignment.expt_map[rank, :]
-            local_expt_set = set(expt_map[expt_map >= 0].tolist())
-            valid_row_mask = torch.tensor([int(a.item()) in local_expt_set for a in active_flat],
-                                          device=active_flat.device, dtype=torch.bool)
-            valid_row_indices = dispatch_flat[:n_tot][valid_row_mask]
-            if valid_row_indices.numel() > 0:
-                _assert_close_with_stats(
-                    "dp_to_ep_remote[valid_rows]",
-                    y_ep_local_ref[valid_row_indices],
-                    y_ep_local_remote_clone[valid_row_indices],
-                    rtol=0.0, atol=0.0,
-                )
-            # Zero out invalid rows in both so matmul reads same data regardless
-            invalid_row_mask = torch.ones(y_ep_local_remote_clone.shape[0], dtype=torch.bool, device=y_ep_local_remote_clone.device)
-            if valid_row_indices.numel() > 0:
-                invalid_row_mask[valid_row_indices] = False
-            y_ep_local_remote_clone.view(torch.uint8)[invalid_row_mask] = 0
-            y_ep_local_ref.view(torch.uint8)[invalid_row_mask] = 0
-            y_ep_local_for_fc1 = y_ep_local_remote_clone
+            # Compare all rows
+            _assert_close_with_stats("dp_to_ep_remote[all]", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
+            # Use ref for fc1 to verify fc1 path independently of gather correctness
+            y_ep_local_for_fc1 = y_ep_local_ref
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
