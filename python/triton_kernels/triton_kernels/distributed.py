@@ -343,7 +343,7 @@ def remote_gather_dp_to_ep(src, expt_assignment, expt_indx, dispatch_indx, symm_
         expt_indx,
         expt_indx.stride(0),
         dispatch_indx,
-        dispatch_indx.stride(0),
+        expt_indx.stride(0),
         n_tokens_local,
         SRC_RANK=symm_mem_pool.mesh.local_rank,
         N_EXPT_ACT=n_expt_act,
