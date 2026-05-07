@@ -169,14 +169,14 @@ def run_mlp_fused(
             )
         if debug_checks:
             y_fc1_ref = matmul(
-                y_ep_local_ref,
+                ref,
                 w1_ep_local,
                 b1_ep_local,
                 a_ragged_metadata=y_ep_local_metadata,
                 precision_config=pc1,
                 fused_activation=act1,
             )
-            _assert_close_with_stats("fc1", y_fc1_ref.float(), y_fc1_local.float())
+            _assert_close_with_stats("fc1", y_fc1_ref.float(), y_fc1_local.float())  # noqa: already using ref
         with scoped_opt_flags_constraints(fc2_constraints or {}):
             y_ep_local = matmul(
                 y_fc1_local,
@@ -187,7 +187,7 @@ def run_mlp_fused(
             )
         if debug_checks:
             y_fc2_ref = matmul(
-                y_fc1_ref,
+                y_fc1_ref,  # y_fc1_ref is defined above
                 w2_ep_local,
                 b2_ep_local,
                 a_ragged_metadata=y_ep_local_metadata,
