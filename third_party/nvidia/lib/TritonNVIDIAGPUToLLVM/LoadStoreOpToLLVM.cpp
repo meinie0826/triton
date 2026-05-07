@@ -23,6 +23,8 @@
 #include "triton/Tools/LayoutUtils.h"
 
 #include <cassert>
+#include <cstdlib>
+#include <cstring>
 
 using namespace mlir;
 using namespace mlir::triton;
@@ -41,6 +43,12 @@ using ::mlir::triton::gpu::NVMMASharedEncodingAttr;
 static constexpr bool disableLDAcquireLowering = false;
 
 namespace {
+
+static bool isMoEGatherDebugEnabled() {
+  const char *env = std::getenv("TRITON_MOE_GATHER_DEBUG");
+  return env && env[0] != '\0' && std::strcmp(env, "0") != 0 &&
+         std::strcmp(env, "false") != 0 && std::strcmp(env, "False") != 0;
+}
 
 unsigned getCanonicalIndex(unsigned index, unsigned freeVarMask) {
   return index & ~freeVarMask;
@@ -1492,31 +1500,38 @@ static LogicalResult iterateGatherScatterIndices(
   // consecutive shared memory. Thus, the layout of the x offsets must be such
   // that 4 consecutive elements are broadcasted to a warp.
   LinearLayout xCoordsLayout = triton::gpu::toLinearLayout(xCoords.getType());
-  llvm::errs() << "\n=== gather4 debug: xCoords layout ===\n";
-  llvm::errs() << "xCoords type: " << xCoords.getType() << "\n";
-  llvm::errs() << "xCoordsLayout:\n" << xCoordsLayout << "\n";
-  llvm::errs() << "register in-dim size: " << xCoordsLayout.getInDimSize(kRegister) << "\n";
-  llvm::errs() << "lane in-dim size: " << xCoordsLayout.getInDimSize(kLane) << "\n";
-  llvm::errs() << "warp in-dim size: " << xCoordsLayout.getInDimSize(kWarp) << "\n";
-  llvm::errs() << "block in-dim size: " << xCoordsLayout.getInDimSize(kBlock) << "\n";
-  // Print register bases
-  for (unsigned i = 0; i < xCoordsLayout.getInDimSizeLog2(kRegister); ++i) {
-    auto basis = xCoordsLayout.getBasis(kRegister, i);
-    llvm::errs() << "  register basis 2^" << i << " -> ";
-    for (auto v : basis) llvm::errs() << v << " ";
-    llvm::errs() << "\n";
+  bool debugGather4 = isMoEGatherDebugEnabled();
+  if (debugGather4) {
+    llvm::errs() << "\n=== gather4 debug: xCoords layout ===\n";
+    llvm::errs() << "xCoords type: " << xCoords.getType() << "\n";
+    llvm::errs() << "xCoordsLayout:\n" << xCoordsLayout << "\n";
+    llvm::errs() << "register in-dim size: "
+                 << xCoordsLayout.getInDimSize(kRegister) << "\n";
+    llvm::errs() << "lane in-dim size: " << xCoordsLayout.getInDimSize(kLane)
+                 << "\n";
+    llvm::errs() << "warp in-dim size: " << xCoordsLayout.getInDimSize(kWarp)
+                 << "\n";
+    llvm::errs() << "block in-dim size: " << xCoordsLayout.getInDimSize(kBlock)
+                 << "\n";
+    for (unsigned i = 0; i < xCoordsLayout.getInDimSizeLog2(kRegister); ++i) {
+      auto basis = xCoordsLayout.getBasis(kRegister, i);
+      llvm::errs() << "  register basis 2^" << i << " -> ";
+      for (auto v : basis)
+        llvm::errs() << v << " ";
+      llvm::errs() << "\n";
+    }
   }
-  // Print lane bases - getInDimSize returns the actual size (e.g. 32)
-  // but the number of bases = log2(size). We can see lane bases from MLIR dump.
-  // (all zero -> warp broadcast -> satisfies gather4 constraint)
   if (xCoordsLayout.getInDimSize(kRegister) < 4) {
-    llvm::errs() << "FAILED: register in-dim size < 4\n";
+    if (debugGather4)
+      llvm::errs() << "FAILED: register in-dim size < 4\n";
     return op->emitError("must have at least 4 x offsets per warp");
   }
   // Check that the first two bases are [1] and [2].
   for (unsigned i : {0, 1}) {
     if (xCoordsLayout.getBasis(kRegister, i).front() != (1 << i)) {
-      llvm::errs() << "FAILED: register basis " << i << " is not " << (1 << i) << "\n";
+      if (debugGather4)
+        llvm::errs() << "FAILED: register basis " << i << " is not "
+                     << (1 << i) << "\n";
       return op->emitError(
           "x offsets are not grouped by 4 contiguous elements");
     }
@@ -1525,30 +1540,34 @@ static LogicalResult iterateGatherScatterIndices(
   // TMA expects the memdesc shape to match the alloc shape.
   triton::gpu::MemDescType smemType = smem.getType();
   ArrayRef<int64_t> allocShape = smemType.getAllocShape();
-  llvm::errs() << "smem type: " << smemType << "\n";
-  llvm::errs() << "smem shape: [";
-  for (size_t i = 0; i < smemType.getShape().size(); ++i) {
-    if (i)
-      llvm::errs() << ", ";
-    llvm::errs() << smemType.getShape()[i];
+  if (debugGather4) {
+    llvm::errs() << "smem type: " << smemType << "\n";
+    llvm::errs() << "smem shape: [";
+    for (size_t i = 0; i < smemType.getShape().size(); ++i) {
+      if (i)
+        llvm::errs() << ", ";
+      llvm::errs() << smemType.getShape()[i];
+    }
+    llvm::errs() << "], alloc shape: [";
+    for (size_t i = 0; i < allocShape.size(); ++i) {
+      if (i)
+        llvm::errs() << ", ";
+      llvm::errs() << allocShape[i];
+    }
+    llvm::errs() << "]\n";
   }
-  llvm::errs() << "], alloc shape: [";
-  for (size_t i = 0; i < allocShape.size(); ++i) {
-    if (i)
-      llvm::errs() << ", ";
-    llvm::errs() << allocShape[i];
-  }
-  llvm::errs() << "]\n";
   if (allocShape.size() < 2 || smemType.getShape() != allocShape.take_back(2)) {
-    llvm::errs() << "FAILED: memdesc shape does not match trailing alloc shape\n";
+    if (debugGather4)
+      llvm::errs() << "FAILED: memdesc shape does not match trailing alloc shape\n";
     return op->emitError("memdesc shape must match alloc shape");
   }
   // `NVMMASharedEncodingAttr` means the core matrix tiles are placed next to
   // each other in shared memory, which lines up with how `gather4` loads data.
   auto enc = dyn_cast<NVMMASharedEncodingAttr>(smemType.getEncoding());
   if (!enc) {
-    llvm::errs() << "FAILED: dst encoding is not NVMMASharedEncodingAttr: "
-                 << smemType.getEncoding() << "\n";
+    if (debugGather4)
+      llvm::errs() << "FAILED: dst encoding is not NVMMASharedEncodingAttr: "
+                   << smemType.getEncoding() << "\n";
     return op->emitError("requires dst encoding NVMMASharedEncodingAttr");
   }
   if (enc.getFp4Padded())
@@ -1569,19 +1588,21 @@ static LogicalResult iterateGatherScatterIndices(
   unsigned innerBlockSize = shapePerCTA.back();
   unsigned contigDimSize = tmaBlockShape.back();
   unsigned numMessagesPerRow = ceil<unsigned>(innerBlockSize, contigDimSize);
-  llvm::errs() << "shapePerCTA: [";
-  for (size_t i = 0; i < shapePerCTA.size(); ++i) {
-    if (i)
-      llvm::errs() << ", ";
-    llvm::errs() << shapePerCTA[i];
+  if (debugGather4) {
+    llvm::errs() << "shapePerCTA: [";
+    for (size_t i = 0; i < shapePerCTA.size(); ++i) {
+      if (i)
+        llvm::errs() << ", ";
+      llvm::errs() << shapePerCTA[i];
+    }
+    llvm::errs() << "], tmaBlockShape: [";
+    for (size_t i = 0; i < tmaBlockShape.size(); ++i) {
+      if (i)
+        llvm::errs() << ", ";
+      llvm::errs() << tmaBlockShape[i];
+    }
+    llvm::errs() << "], numMessagesPerRow=" << numMessagesPerRow << "\n";
   }
-  llvm::errs() << "], tmaBlockShape: [";
-  for (size_t i = 0; i < tmaBlockShape.size(); ++i) {
-    if (i)
-      llvm::errs() << ", ";
-    llvm::errs() << tmaBlockShape[i];
-  }
-  llvm::errs() << "], numMessagesPerRow=" << numMessagesPerRow << "\n";
 
   // `xCoordsLayout` maps the register ID into dim0. Tile dim1 by adding a new
   // dimension representing the TMA message ID.
@@ -1606,15 +1627,19 @@ static LogicalResult iterateGatherScatterIndices(
   auto freeVars = xCoordsLayout.getFreeVariableMasks();
   unsigned regMask = freeVars[kRegister];
   unsigned warpMask = freeVars[kWarp];
-  llvm::errs() << "free variable masks:\n";
-  for (auto [name, mask] : freeVars)
-    llvm::errs() << "  " << name << " = " << mask << "\n";
+  if (debugGather4) {
+    llvm::errs() << "free variable masks:\n";
+    for (auto [name, mask] : freeVars)
+      llvm::errs() << "  " << name << " = " << mask << "\n";
+  }
   if (freeVars[kLane] != (threadsPerWarp - 1)) {
-    llvm::errs() << "FAILED: lane free vars = " << freeVars[kLane]
-                << " but expected " << (threadsPerWarp - 1) << "\n";
+    if (debugGather4)
+      llvm::errs() << "FAILED: lane free vars = " << freeVars[kLane]
+                   << " but expected " << (threadsPerWarp - 1) << "\n";
     return op->emitError("x offsets must be broadcasted across each warp");
   }
-  llvm::errs() << "=== gather4 debug: ALL CONSTRAINTS PASSED ===\n\n";
+  if (debugGather4)
+    llvm::errs() << "=== gather4 debug: ALL CONSTRAINTS PASSED ===\n\n";
 
   Value warpId = mlir::triton::gpu::WarpIdOp::create(rewriter, loc);
   Value blockId = nvgpu::ClusterCTAIdOp::create(rewriter, loc);
