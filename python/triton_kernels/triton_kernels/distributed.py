@@ -253,6 +253,105 @@ def _convert_ep_to_dp(
         dst_ptrs += BLOCK
 
 
+@triton.jit
+def _gather_dp_to_ep_remote(
+    peer_src_ptrs,
+    dst_ptr,
+    dst_stride_m,
+    src_stride_m,
+    src_shape_n,
+    expt_filter_ptr,
+    expt_filter_stride_m,
+    expt_indx_ptr,
+    expt_indx_stride_m,
+    dst_row_indx_ptr,
+    dst_row_indx_stride_m,
+    n_tokens_local,
+    SRC_RANK: tl.constexpr,
+    N_EXPT_ACT: tl.constexpr,
+    N_RANKS: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
+    pid_m = tl.program_id(0)
+    off_m_global = pid_m
+    src_rank = off_m_global // n_tokens_local
+    off_m_local = off_m_global - src_rank * n_tokens_local
+    offs_e = tl.arange(0, N_EXPT_ACT)
+    dst_row_indx = tl.load(dst_row_indx_ptr + off_m_global * dst_row_indx_stride_m + offs_e)
+    expt_indx = tl.load(expt_indx_ptr + off_m_global * expt_indx_stride_m + offs_e)
+    expt_filter_ptr_rows = expt_filter_ptr + SRC_RANK * expt_filter_stride_m
+    expt_filter = (tl.load(expt_filter_ptr_rows + (expt_indx // 32)) >> (expt_indx % 32)) & 1
+    src_row_ptr = tl.zeros((N_EXPT_ACT,), dtype=tl.int64)
+    for i in tl.static_range(N_RANKS):
+        peer_src_ptr = peer_src_ptrs[i].to(tl.int64, bitcast=True)
+        src_row_ptr = tl.where(src_rank == i, peer_src_ptr + off_m_local * src_stride_m, src_row_ptr)
+    src_row_ptr = src_row_ptr.to(dst_ptr.dtype, bitcast=True)
+    src_row_ptr = tl.multiple_of(src_row_ptr, 16)
+    dst_row_ptrs = dst_ptr.to(tl.int64, bitcast=True)
+    dst_row_ptrs = dst_row_ptrs.to(dst_ptr.dtype, bitcast=True)
+    dst_row_ptrs = tl.multiple_of(dst_row_ptrs, 16)
+    dst_row_ptrs = dst_row_ptrs + dst_row_indx * dst_stride_m
+    offs_n = tl.arange(0, BLOCK)
+    src_ptrs = src_row_ptr[:, None] + offs_n[None, :]
+    dst_ptrs = dst_row_ptrs[:, None] + offs_n[None, :]
+    for start_n in range(0, src_shape_n, BLOCK):
+        mask_n = start_n + offs_n < src_shape_n
+        src = tl.load(src_ptrs, mask=mask_n[None, :], other=0.0)
+        tl.store(dst_ptrs, src, mask=(mask_n[None, :] & (expt_filter[:, None] != 0)))
+        src_ptrs += BLOCK
+        dst_ptrs += BLOCK
+
+
+def remote_gather_dp_to_ep(src, expt_assignment, expt_indx, dispatch_indx, symm_mem_pool: SymmetricMemoryPool):
+    expt_bitmask = expt_assignment.expt_bitmask
+    device = src.device
+    n_tokens_local, d_model = src.shape
+    n_tokens_global, n_expt_act = expt_indx.shape
+    assert symm_mem_pool.mesh.world_size == expt_bitmask.size(0)
+    assert all(t.device == device for t in [expt_bitmask, expt_indx, dispatch_indx])
+    assert expt_bitmask.dtype == torch.int32
+    assert expt_bitmask.stride(-1) == 1 and expt_indx.stride(-1) == 1 and dispatch_indx.stride(-1) == 1
+    assert n_tokens_local * symm_mem_pool.mesh.world_size <= n_tokens_global
+
+    src_peer_bufs = symm_mem_pool.make_empty(
+        region="dp_x",
+        shape=(n_tokens_local, d_model),
+        dtype=src.dtype,
+    )
+    src_peer_bufs[symm_mem_pool.mesh.local_rank].copy_(src)
+    symm_mem_pool.hdl.barrier(channel=0)
+
+    peer_bufs = symm_mem_pool.make_empty(
+        region="dp_to_ep",
+        shape=(n_tokens_global * n_expt_act, d_model),
+        dtype=src.dtype,
+    )
+    dst_local = peer_bufs[symm_mem_pool.mesh.local_rank]
+
+    BLOCK = 512
+    grid = (n_tokens_global,)
+    _gather_dp_to_ep_remote[grid](
+        tuple(src_peer_bufs),
+        dst_local,
+        dst_local.stride(0),
+        src_peer_bufs[0].stride(0),
+        src.shape[1],
+        expt_bitmask,
+        expt_bitmask.stride(0),
+        expt_indx,
+        expt_indx.stride(0),
+        dispatch_indx,
+        dispatch_indx.stride(0),
+        n_tokens_local,
+        SRC_RANK=symm_mem_pool.mesh.local_rank,
+        N_EXPT_ACT=n_expt_act,
+        N_RANKS=symm_mem_pool.mesh.world_size,
+        BLOCK=BLOCK,
+    )
+    symm_mem_pool.hdl.barrier(channel=0)
+    return dst_local
+
+
 def convert_ep_to_dp(src, expt_assignment, expt_indx, topk_indx, symm_mem_pool: SymmetricMemoryPool):
     expt_bitmask = expt_assignment.expt_bitmask
     # extract problem dimensions

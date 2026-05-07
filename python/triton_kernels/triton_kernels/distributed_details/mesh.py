@@ -157,10 +157,13 @@ class SymmetricMemoryPool:
         num_blocks_n = cdiv(n_expts_tot, BLOCK_N)
         n_bytes_topk += num_blocks_m * BLOCK_M * num_blocks_n * BLOCK_N // 32 * 4  # expt bitmatrix (int32)
         elem_size = torch.empty((), dtype=dtype).element_size()
+        n_tokens_local = n_tokens_global // self.mesh.world_size
+        n_bytes_dp_x = n_tokens_local * d_input * elem_size
         n_bytes_dp_to_ep = n_tokens_global * n_expts_act * d_input * elem_size
-        n_bytes_ep_to_dp = (n_tokens_global // self.mesh.world_size) * n_expts_act * d_model * elem_size
+        n_bytes_ep_to_dp = n_tokens_local * n_expts_act * d_model * elem_size
 
         offset = self._reserve_region("topk", n_bytes_topk, 128, 0)
+        offset = self._reserve_region("dp_x", n_bytes_dp_x, 128, offset)
         offset = self._reserve_region("ep_to_dp", n_bytes_ep_to_dp, 128, offset)
         offset = self._reserve_region("dp_to_ep", n_bytes_dp_to_ep, 128, offset)
         self._initialize(device=device)

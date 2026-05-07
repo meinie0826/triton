@@ -7,7 +7,13 @@ import statistics
 import torch
 
 from bench_mlp import parse_dtype, quantize_weight, run_mlp as run_mlp_materialized, was_launched_with_torchrun
-from triton_kernels.distributed import make_expt_assignment, make_expt_dict_uniform, SymmetricMemoryPool
+from triton_kernels.distributed import (
+    convert_ep_to_dp,
+    make_expt_assignment,
+    make_expt_dict_uniform,
+    remote_gather_dp_to_ep,
+    SymmetricMemoryPool,
+)
 from triton_kernels.matmul import FlexCtx, FusedActivation, FnSpecs, PrecisionConfig, matmul
 from triton_kernels.matmul_details.opt_flags import scoped_opt_flags_constraints
 from triton_kernels.reduce import reduce
@@ -66,16 +72,44 @@ def run_mlp_fused(
     l_dp_local = matmul(x_dp_local_bf16, wg_global, bg_global, precision_config=pcg)
     l_global_active = topk(l_dp_local, n_expts_act, apply_softmax=True, all_gather=True, symm_mem_pool=symm_mem_pool)
 
+    active_indx = l_global_active.indx
     expt_sizes = l_global_active.mask_metadata.col_sum
     dispatch_indx = l_global_active.mask_metadata.row_sorted_indx
     combine_indx = l_global_active.mask_metadata.col_sorted_indx
     x_global_metadata = make_ragged_tensor_metadata(expt_sizes, dispatch_indx.shape[0])
+    y_ep_local_metadata = remap_ragged_tensor_metadata(x_global_metadata, expt_assignment.expt_map[rank, :])
+
+    if symm_mem_pool.mesh.world_size > 1:
+        # MegaMoE-style first cut: avoid source-rank push dispatch by exposing
+        # local X through symmetric memory and pulling the needed remote rows on
+        # each expert rank. FC1/FC2 stay on the existing ragged matmul path.
+        y_ep_local = remote_gather_dp_to_ep(x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool)
+        with scoped_opt_flags_constraints(fc1_constraints or {}):
+            y_ep_local = matmul(
+                y_ep_local,
+                w1_ep_local,
+                b1_ep_local,
+                a_ragged_metadata=y_ep_local_metadata,
+                precision_config=pc1,
+                fused_activation=act1,
+            )
+        with scoped_opt_flags_constraints(fc2_constraints or {}):
+            y_ep_local = matmul(
+                y_ep_local,
+                w2_ep_local,
+                b2_ep_local,
+                a_ragged_metadata=y_ep_local_metadata,
+                precision_config=pc2,
+            )
+        y_dp_local = convert_ep_to_dp(y_ep_local, expt_assignment, active_indx, combine_indx, symm_mem_pool)
+        y_dp_local = y_dp_local.view(-1, n_expts_act, y_dp_local.shape[-1])
+        z_dp_local, _ = reduce(y_dp_local, dim=1)
+        return z_dp_local
 
     # SonicMoE-style path:
     # keep X dense, gather it on the fly inside FC1, then scatter FC2 back to
     # token/top-k order instead of materializing a separate dispatch tensor.
     x_gather_idx = combine_indx // n_expts_act
-    y_ep_local_metadata = remap_ragged_tensor_metadata(x_global_metadata, expt_assignment.expt_map[rank, :])
     with scoped_opt_flags_constraints(fc1_constraints or {}):
         y_ep_local = matmul(
             x_dp_local_fp8,
@@ -265,7 +299,8 @@ def compare_case(
         f"batch_per_expt={batch_per_expt} "
         f"standard_ms={standard_stats['median']:.3f} "
         f"fused_ms={fused_stats['median']:.3f} "
-        f"speedup={speedup:.3f}",
+        f"speedup={speedup:.3f} "
+        f"mode={'local_gather_scatter' if ep == 1 else 'remote_pull_dispatch'}",
         flush=True,
     )
 
@@ -289,15 +324,12 @@ def main():
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(backend="nccl", world_size=world_size, device_id=torch.device(local_rank))
-    if torch.distributed.get_world_size() != 1:
-        raise RuntimeError("bench_mlp_fused currently targets the single-GPU SonicMoE-style path")
-
     has_native_mx4 = torch.cuda.get_device_capability(0)[0] >= 10 or get_cdna_version() == 4
     dense_dtypes = ["fp8", "fp8"]
     quantized_dtypes = ["fp8", "mx4"] if has_native_mx4 else ["bf16", "mx4"]
 
     batch_sizes = [int(x) for x in args.batch_sizes.split(",") if x]
-    ep = 1
+    ep = torch.distributed.get_world_size()
 
     print("### fp8x-fp8w", flush=True)
     for batch_per_expt in batch_sizes:
