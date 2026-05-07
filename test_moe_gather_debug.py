@@ -49,12 +49,13 @@ def run():
     gather_indx = torch.randperm(M, dtype=torch.int32, device="cuda")
     out = torch.zeros((M, K), dtype=torch.bfloat16, device="cuda")
 
-    # TensorDescriptor created OUTSIDE kernel (host side), passed as argument
+    # TensorDescriptor: block_shape[0] must be 1 for gather (per semantic.py:1143)
+    # In _p_matmul.py, swizzle_block_shape() handles this automatically
     X_desc = TensorDescriptor(
         X_data,
         shape=[M, K],
         strides=[K, 1],
-        block_shape=[BLOCK_M, BLOCK_K],
+        block_shape=[1, BLOCK_K],
     )
 
     grid = (triton.cdiv(M, BLOCK_M),)
