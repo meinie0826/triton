@@ -110,9 +110,12 @@ def run_mlp_fused(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             ).clone()
             _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
+            y_ep_local_for_fc1 = y_ep_local_remote_clone
+        else:
+            y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
             y_fc1_local = matmul(
-                y_ep_local_remote,
+                y_ep_local_for_fc1,
                 w1_ep_local,
                 b1_ep_local,
                 a_ragged_metadata=y_ep_local_metadata,
