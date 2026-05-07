@@ -189,6 +189,7 @@ def convert_dp_to_ep(src, expt_assignment, expt_indx, gate_indx, symm_mem_pool: 
         region="dp_to_ep",
         shape=(n_tokens_global * n_expt_act, d_model),
         dtype=src.dtype,
+        clear=True,
     )
     dst_local = peer_bufs[symm_mem_pool.mesh.local_rank]
     hdl = symm_mem_pool.hdl
@@ -327,6 +328,7 @@ def remote_gather_dp_to_ep(src, expt_assignment, expt_indx, dispatch_indx, symm_
         region="dp_to_ep",
         shape=(n_tokens_global * n_expt_act, d_model),
         dtype=src.dtype,
+        clear=True,
     )
     dst_local = peer_bufs[symm_mem_pool.mesh.local_rank]
 

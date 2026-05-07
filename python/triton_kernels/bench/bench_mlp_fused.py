@@ -109,10 +109,8 @@ def run_mlp_fused(
             y_ep_local_ref = convert_dp_to_ep(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             ).clone()
-            # Compare all rows
-            _assert_close_with_stats("dp_to_ep_remote[all]", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
-            # Use ref for fc1 to verify fc1 path independently of gather correctness
-            y_ep_local_for_fc1 = y_ep_local_ref
+            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
+            y_ep_local_for_fc1 = y_ep_local_remote_clone
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
