@@ -129,8 +129,8 @@ def run_mlp_fused(
             invalid_row_mask = torch.ones(y_ep_local_remote_clone.shape[0], dtype=torch.bool, device=y_ep_local_remote_clone.device)
             if valid_row_indices.numel() > 0:
                 invalid_row_mask[valid_row_indices] = False
-            y_ep_local_remote_clone[invalid_row_mask] = 0
-            y_ep_local_ref[invalid_row_mask] = 0
+            y_ep_local_remote_clone.view(torch.uint8)[invalid_row_mask] = 0
+            y_ep_local_ref.view(torch.uint8)[invalid_row_mask] = 0
             y_ep_local_for_fc1 = y_ep_local_remote_clone
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
