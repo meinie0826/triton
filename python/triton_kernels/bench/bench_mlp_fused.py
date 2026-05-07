@@ -127,7 +127,7 @@ def run_mlp_fused(
                 precision_config=pc1,
                 fused_activation=act1,
             )
-            _assert_close_with_stats("fc1", y_fc1_ref, y_fc1_local)
+            _assert_close_with_stats("fc1", y_fc1_ref, y_fc1_local, rtol=0.0, atol=0.0)
         with scoped_opt_flags_constraints(fc2_constraints or {}):
             y_ep_local = matmul(
                 y_fc1_local,
@@ -144,7 +144,7 @@ def run_mlp_fused(
                 a_ragged_metadata=y_ep_local_metadata,
                 precision_config=pc2,
             )
-            _assert_close_with_stats("fc2", y_fc2_ref, y_ep_local)
+            _assert_close_with_stats("fc2", y_fc2_ref, y_ep_local, rtol=0.0, atol=0.0)
         y_dp_local = convert_ep_to_dp(y_ep_local, expt_assignment, active_indx, combine_indx, symm_mem_pool)
         y_dp_local = y_dp_local.view(-1, n_expts_act, y_dp_local.shape[-1])
         z_dp_local, _ = reduce(y_dp_local, dim=1)
