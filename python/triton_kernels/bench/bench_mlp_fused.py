@@ -124,12 +124,38 @@ def run_mlp_fused(
             x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
         )
         if debug_checks:
-            y_ep_local_remote_clone = y_ep_local_remote.clone()
-            y_ep_local_ref = convert_dp_to_ep(
+            # Debug: print expert assignment and row mapping info
+            expt_map = expt_assignment.expt_map[rank, :]
+            local_expts = expt_map[expt_map >= 0]
+            print(f"[rank{rank}] local_expts={local_expts.tolist()[:8]}... "
+                  f"expt_bitmask_row={expt_assignment.expt_bitmask[rank, :].tolist()}",
+                  flush=True)
+            # Check which dispatch_indx rows correspond to local experts
+            active_flat = active_indx.reshape(-1)
+            dispatch_flat = dispatch_indx
+            local_expt_set = set(local_expts.tolist())
+            local_mask = torch.tensor([int(a.item()) in local_expt_set for a in active_flat],
+                                      device=active_flat.device, dtype=torch.bool)
+            local_dispatch_rows = dispatch_flat[local_mask]
+            print(f"[rank{rank}] local_dispatch_rows range: "
+                  f"min={local_dispatch_rows.min().item()} max={local_dispatch_rows.max().item()} "
+                  f"count={local_dispatch_rows.shape[0]}",
+                  flush=True)
+            # Check which rows in ref and val have data
+            ref = convert_dp_to_ep(
                 x_dp_local_fp8, expt_assignment, active_indx, dispatch_indx, symm_mem_pool
             ).clone()
-            _assert_close_with_stats("dp_to_ep_remote", y_ep_local_ref, y_ep_local_remote_clone, rtol=0.0, atol=0.0)
-            y_ep_local_for_fc1 = y_ep_local_remote_clone
+            val = y_ep_local_remote.clone()
+            ref_nonzero_rows = (ref.float().abs().max(dim=-1).values > 0).nonzero(as_tuple=True)[0]
+            val_nonzero_rows = (val.float().abs().max(dim=-1).values > 0).nonzero(as_tuple=True)[0]
+            print(f"[rank{rank}] ref_nonzero_rows: min={ref_nonzero_rows.min().item()} "
+                  f"max={ref_nonzero_rows.max().item()} count={ref_nonzero_rows.shape[0]}",
+                  flush=True)
+            print(f"[rank{rank}] val_nonzero_rows: min={val_nonzero_rows.min().item()} "
+                  f"max={val_nonzero_rows.max().item()} count={val_nonzero_rows.shape[0]}",
+                  flush=True)
+            _assert_close_with_stats("dp_to_ep_remote", ref, val, rtol=0.0, atol=0.0)
+            y_ep_local_for_fc1 = val
         else:
             y_ep_local_for_fc1 = y_ep_local_remote
         with scoped_opt_flags_constraints(fc1_constraints or {}):
