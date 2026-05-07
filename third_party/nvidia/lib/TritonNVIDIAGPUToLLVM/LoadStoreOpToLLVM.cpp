@@ -1506,14 +1506,9 @@ static LogicalResult iterateGatherScatterIndices(
     for (auto v : basis) llvm::errs() << v << " ";
     llvm::errs() << "\n";
   }
-  // Print lane bases - getInDimSize returns log2 of size but bases may be fewer
-  // for slice layouts; iterate only over actual bases count
-  for (int i = 0; (1 << i) < (int)xCoordsLayout.getInDimSize(kLane); ++i) {
-    auto basis = xCoordsLayout.getBasis(kLane, i);
-    llvm::errs() << "  lane=" << i << " -> basis: ";
-    for (auto v : basis) llvm::errs() << v << " ";
-    llvm::errs() << "\n";
-  }
+  // Print lane bases - getInDimSize returns the actual size (e.g. 32)
+  // but the number of bases = log2(size). We can see lane bases from MLIR dump.
+  // (all zero -> warp broadcast -> satisfies gather4 constraint)
   if (xCoordsLayout.getInDimSize(kRegister) < 4) {
     llvm::errs() << "FAILED: register in-dim size < 4\n";
     return op->emitError("must have at least 4 x offsets per warp");
